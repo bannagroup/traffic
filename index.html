@@ -1,382 +1,743 @@
-// ============================================================
-// 📥 استيراد البيانات من Google Sheets (Excel / CSV)
-// ============================================================
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🚦 النظام المتكامل</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Readex+Pro:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<!-- XLSX -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<!-- Firebase v9 Compat -->
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<!-- App Config -->
+<script src="js/firebase-config.js"></script>
+</head>
+<body>
+<div class="app">
 
-// خريطة الأعمدة لكل نوع بيانات
-const SHEET_MAPS = {
-  drivers: {
-    label: 'السائقون والسيارات',
-    icon: '👤',
-    collection: 'drivers',
-    columns: ['name', 'car'],
-    headers: ['اسم السائق', 'رقم السيارة'],
-    sample: ['محمد أحمد', 'أ ب ج 1234'],
-    transform: (row) => ({
-      name: ss(row[0]),
-      car:  ss(row[1])
-    }),
-    validate: (r) => !!r.name
-  },
-  violations: {
-    label: 'المخالفات',
-    icon: '🚨',
-    collection: 'violations',
-    columns: ['date', 'driver', 'car', 'desc', 'amount'],
-    headers: ['التاريخ', 'اسم السائق', 'رقم السيارة', 'الوصف', 'المبلغ'],
-    sample: ['2024-01-15', 'محمد أحمد', 'أ ب ج 1234', 'سرعة زائدة', '500'],
-    transform: (row) => ({
-      date:   toISO(row[0]) || '',
-      driver: ss(row[1]),
-      car:    ss(row[2]),
-      desc:   ss(row[3]),
-      amount: Number(row[4]) || 0
-    }),
-    validate: (r) => !!r.driver && r.amount > 0
-  },
-  deductions: {
-    label: 'الخصومات',
-    icon: '💸',
-    collection: 'deductions',
-    columns: ['date', 'driver', 'amount', 'type'],
-    headers: ['التاريخ', 'اسم السائق', 'المبلغ', 'النوع'],
-    sample: ['2024-01-20', 'محمد أحمد', '1000', 'خصم شهري'],
-    transform: (row) => ({
-      date:   toISO(row[0]) || '',
-      driver: ss(row[1]),
-      amount: Number(row[2]) || 0,
-      type:   ss(row[3]) || 'خصم'
-    }),
-    validate: (r) => !!r.driver && r.amount > 0
-  },
-  licenses: {
-    label: 'التراخيص',
-    icon: '🪪',
-    collection: 'licenses',
-    columns: ['carNumber', 'company', 'carType', 'chassis', 'driver', 'expiry', 'notes'],
-    headers: ['رقم السيارة', 'الشركة', 'نوع السيارة', 'رقم الشاسيه', 'السائق', 'تاريخ الانتهاء', 'ملاحظات'],
-    sample: ['أ ب ج 1234', 'شركة النقل', 'نقل', 'ABC123', 'محمد أحمد', '2025-06-30', ''],
-    transform: (row) => {
-      const expiry = toISO(row[5]) || '';
-      const { status, diffDays } = calcLicenseStatus(expiry);
-      return {
-        carNumber: ss(row[0]),
-        company:   ss(row[1]),
-        carType:   ss(row[2]),
-        chassis:   ss(row[3]),
-        driver:    ss(row[4]),
-        expiry,
-        notes:     ss(row[6]),
-        status,
-        diffDays
-      };
-    },
-    validate: (r) => !!r.carNumber
-  },
-  custody: {
-    label: 'العهد',
-    icon: '📦',
-    collection: 'custody',
-    columns: ['date', 'employee', 'car', 'itemDesc', 'quantity', 'unit', 'value', 'status', 'notes'],
-    headers: ['التاريخ', 'الموظف', 'رقم السيارة', 'الصنف', 'الكمية', 'الوحدة', 'القيمة', 'الحالة', 'ملاحظات'],
-    sample: ['2024-01-10', 'محمد أحمد', 'أ ب ج 1234', 'إطار احتياطي', '2', 'قطعة', '800', 'مسلّمة', ''],
-    transform: (row) => ({
-      date:     toISO(row[0]) || '',
-      employee: ss(row[1]),
-      car:      ss(row[2]),
-      itemDesc: ss(row[3]),
-      quantity: Number(row[4]) || 1,
-      unit:     ss(row[5]) || 'قطعة',
-      value:    Number(row[6]) || 0,
-      status:   ss(row[7]) || 'مسلّمة',
-      notes:    ss(row[8])
-    }),
-    validate: (r) => !!r.employee && !!r.itemDesc
-  },
-  approvals: {
-    label: 'الموافقات',
-    icon: '✅',
-    collection: 'approvals',
-    columns: ['date', 'requestType', 'requester', 'description', 'status', 'approver', 'notes'],
-    headers: ['التاريخ', 'نوع الطلب', 'مقدم الطلب', 'الوصف', 'الحالة', 'الموافق', 'ملاحظات'],
-    sample: ['2024-01-05', 'إجازة', 'أحمد محمد', 'طلب إجازة سنوية', 'موافق', 'المدير', ''],
-    transform: (row) => ({
-      date:        toISO(row[0]) || '',
-      requestType: ss(row[1]),
-      requester:   ss(row[2]),
-      description: ss(row[3]),
-      status:      ss(row[4]) || 'قيد المراجعة',
-      approver:    ss(row[5]),
-      notes:       ss(row[6])
-    }),
-    validate: (r) => !!r.requester && !!r.requestType
-  },
-  invoices: {
-    label: 'الفواتير',
-    icon: '🧾',
-    collection: 'invoices',
-    columns: ['invoiceNum', 'date', 'client', 'description', 'total', 'status', 'notes'],
-    headers: ['رقم الفاتورة', 'التاريخ', 'العميل/الجهة', 'الوصف', 'الإجمالي', 'الحالة', 'ملاحظات'],
-    sample: ['INV-001', '2024-01-15', 'شركة النقل', 'خدمات نقل', '5000', 'مدفوعة', ''],
-    transform: (row) => ({
-      invoiceNum: ss(row[0]),
-      date:       toISO(row[1]) || '',
-      client:     ss(row[2]),
-      description:ss(row[3]),
-      total:      Number(row[4]) || 0,
-      status:     ss(row[5]) || 'معلقة',
-      notes:      ss(row[6]),
-      items:      []
-    }),
-    validate: (r) => !!r.client && r.total > 0
-  }
-};
+<!-- ══════════════════ TOPBAR ══════════════════ -->
+<header class="topbar">
+  <div class="brand"><div class="brand-dot"></div>النظام المتكامل</div>
+  <nav class="topbar-nav">
+    <button class="tnav-btn active" onclick="show('dash')"     id="tn-dash">🏠 الرئيسية</button>
+    <button class="tnav-btn"        onclick="show('drivers')"  id="tn-drivers">👤 السائقون</button>
+    <button class="tnav-btn"        onclick="show('add-v')"    id="tn-add-v">➕ مخالفة</button>
+    <button class="tnav-btn"        onclick="show('add-d')"    id="tn-add-d">➕ خصم</button>
+    <button class="tnav-btn"        onclick="show('vlog')"     id="tn-vlog">🚨 المخالفات</button>
+    <button class="tnav-btn"        onclick="show('dlog')"     id="tn-dlog">💸 الخصومات</button>
+    <button class="tnav-btn"        onclick="show('acc')"      id="tn-acc">💰 الحسابات</button>
+    <button class="tnav-btn"        onclick="show('reports')"  id="tn-reports">📊 التقارير</button>
+    <button class="tnav-btn teal"   onclick="show('licenses')" id="tn-licenses">🪪 التراخيص</button>
+    <button class="tnav-btn purple" onclick="show('custody')"  id="tn-custody">📦 العهد</button>
+    <button class="tnav-btn green"  onclick="show('approvals')" id="tn-approvals">✅ الموافقات</button>
+    <button class="tnav-btn orange" onclick="show('invoices')" id="tn-invoices">🧾 الفواتير</button>
+    <button class="tnav-btn"        onclick="show('import')"   id="tn-import">📥 استيراد</button>
+    <button class="tnav-btn"        onclick="show('settings')" id="tn-settings">⚙️ الإعدادات</button>
+  </nav>
+</header>
 
-// الحالة الداخلية للاستيراد
-const IMP = {
-  current: 'drivers',
-  parsed:  {},
-  stats:   {}
-};
+<!-- ══════════════════ STATUS BAR ══════════════════ -->
+<div class="status-bar">
+  <div class="status-dot loading" id="status-dot"></div>
+  <span id="status-txt">جاري الاتصال بـ Firebase...</span>
+  <button class="btn btn-outline btn-sm" onclick="loadAll()" style="margin-right:auto;font-size:.71rem;padding:4px 9px">🔄 تحديث</button>
+  <button class="btn btn-outline btn-sm" onclick="exportToExcel()" style="font-size:.71rem;padding:4px 9px">📊 تصدير Excel</button>
+</div>
 
-// ── تهيئة القسم ──────────────────────────────────────────
+<!-- ══════════════════ FIREBASE WARNING ══════════════════ -->
+<div id="fb-warning" style="display:none;background:#7c2d12;color:#fef3c7;padding:10px 1.4rem;font-size:.81rem;font-weight:600;text-align:center;border-bottom:2px solid #b45309">
+  ⚠️ Firebase غير مُهيَّأ — عدّل ملف <strong>js/firebase-config.js</strong> وأضف بيانات مشروعك
+</div>
 
-function initImportSection() {
-  const tabBar = document.getElementById('imp-tab-bar');
-  const panels = document.getElementById('imp-panels');
-  if (!tabBar || !panels) return;
+<!-- ══════════════════ CONTENT ══════════════════ -->
+<div class="content">
 
-  tabBar.innerHTML = '';
-  panels.innerHTML = '';
+<!-- ╔══════════════════════════════════════════╗ -->
+<!-- ║  🏠  DASHBOARD                           ║ -->
+<!-- ╚══════════════════════════════════════════╝ -->
+<section class="section active" id="dash">
+  <div class="pg-head">
+    <div><div class="pg-title">🏠 لوحة <em>التحكم</em></div><div class="pg-sub">نظرة عامة على جميع البيانات</div></div>
+    <button class="btn btn-outline btn-sm" onclick="loadAll()">🔄 تحديث</button>
+  </div>
+  <div class="stats-row">
+    <div class="stat red"><div class="stat-label">المخالفات</div><div class="stat-val" id="s-vc">—</div></div>
+    <div class="stat red"><div class="stat-label">إجمالي المخالفات</div><div class="stat-val" id="s-va">—</div></div>
+    <div class="stat green"><div class="stat-label">إجمالي الخصومات</div><div class="stat-val" id="s-da">—</div></div>
+    <div class="stat gold"><div class="stat-label">المتبقي</div><div class="stat-val" id="s-rem">—</div></div>
+    <div class="stat blue"><div class="stat-label">السائقون</div><div class="stat-val" id="s-dr">—</div></div>
+    <div class="stat blue"><div class="stat-label">السيارات</div><div class="stat-val" id="s-cars">—</div></div>
+    <div class="stat orange"><div class="stat-label">إجمالي الفواتير</div><div class="stat-val" id="s-inv">—</div></div>
+    <div class="stat purple"><div class="stat-label">عهد مسجلة</div><div class="stat-val" id="s-cust">—</div></div>
+  </div>
+  <div class="dash-grid">
+    <div class="dash-card">
+      <div class="dash-card-head">🚨 آخر المخالفات</div>
+      <div class="dash-card-body">
+        <table><thead><tr><th>التاريخ</th><th>السائق</th><th>السيارة</th><th>الوصف</th><th>المبلغ</th></tr></thead>
+        <tbody id="dash-vtbl"><tr><td colspan="5" class="tbl-loading"><span class="spinner"></span> جاري التحميل</td></tr></tbody></table>
+      </div>
+    </div>
+    <div class="dash-card">
+      <div class="dash-card-head" style="background:#0e7490">🪪 تراخيص تحتاج انتباه</div>
+      <div class="dash-card-body">
+        <div style="display:flex;gap:8px;padding:8px 14px;flex-wrap:wrap">
+          <span class="tag tag-ok">ساري: <span id="s-lic-ok">—</span></span>
+          <span class="tag tag-warn">ينتهي قريباً: <span id="s-lic-soon">—</span></span>
+          <span class="tag tag-expired">منتهي: <span id="s-lic-exp">—</span></span>
+        </div>
+        <table><thead><tr><th>رقم السيارة</th><th>الشركة</th><th>تاريخ الانتهاء</th><th>الحالة</th></tr></thead>
+        <tbody id="dash-lic-tbl"><tr><td colspan="4" class="tbl-loading"><span class="spinner"></span></td></tr></tbody></table>
+      </div>
+    </div>
+    <div class="dash-card">
+      <div class="dash-card-head" style="background:#6b21a8">✅ طلبات الموافقة المعلقة (<span id="s-appr-pend">0</span>)</div>
+      <div class="dash-card-body">
+        <table><thead><tr><th>النوع</th><th>مقدم الطلب</th><th>الحالة</th></tr></thead>
+        <tbody id="dash-appr-tbl"><tr><td colspan="3" class="tbl-loading"><span class="spinner"></span></td></tr></tbody></table>
+      </div>
+    </div>
+  </div>
+</section>
 
-  Object.entries(SHEET_MAPS).forEach(([key, cfg]) => {
-    // تاب
-    const tab = document.createElement('button');
-    tab.className = 'imp-tab' + (key === IMP.current ? ' active' : '');
-    tab.textContent = cfg.icon + ' ' + cfg.label;
-    tab.onclick = () => switchImportTab(key);
-    tabBar.appendChild(tab);
+<!-- ╔══════════════════════════════════════════╗ -->
+<!-- ║  👤  DRIVERS                             ║ -->
+<!-- ╚══════════════════════════════════════════╝ -->
+<section class="section" id="drivers">
+  <div class="pg-head">
+    <div><div class="pg-title">إدارة <em>السائقين</em></div><div class="pg-sub" id="dr-count">—</div></div>
+    <button class="btn btn-blue" onclick="openAddDriver()">➕ إضافة سائق</button>
+  </div>
+  <div class="toolbar">
+    <div class="search-wrap"><span class="search-icon">🔍</span>
+      <input type="text" placeholder="ابحث باسم السائق أو رقم السيارة..." oninput="FILTERS.dr=this.value;buildDriversTable()">
+    </div>
+  </div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>#</th><th>اسم السائق</th><th>رقم السيارة</th><th>إجراء</th></tr></thead>
+    <tbody id="dr-tbl"><tr><td colspan="4" class="tbl-loading"><span class="spinner"></span> جاري التحميل</td></tr></tbody>
+  </table></div>
+</section>
 
-    // بانيل
-    const panel = document.createElement('div');
-    panel.id = 'imp-panel-' + key;
-    panel.className = 'import-panel';
-    panel.style.display = key === IMP.current ? '' : 'none';
-    panel.innerHTML = buildImportPanel(key, cfg);
-    panels.appendChild(panel);
-  });
+<!-- ╔══════════════════════════════════════════╗ -->
+<!-- ║  ➕  ADD VIOLATION                       ║ -->
+<!-- ╚══════════════════════════════════════════╝ -->
+<section class="section" id="add-v">
+  <div class="pg-head">
+    <div><div class="pg-title">تسجيل <em>مخالفة</em></div><div class="pg-sub">إضافة مخالفة جديدة</div></div>
+  </div>
+  <div class="form-card">
+    <div class="form-card-head">🚨 بيانات المخالفة</div>
+    <div class="form-body">
+      <div class="form-grid">
+        <div class="fg"><label>التاريخ</label><input type="date" id="fv-date"></div>
+        <div class="fg"><label>اسم السائق</label><input type="text" id="fv-driver" list="dl-list" placeholder="ابدأ بالكتابة..."></div>
+        <div class="fg span2"><label>رقم السيارة</label><input type="text" id="fv-car" placeholder="رقم اللوحة"></div>
+      </div>
+      <div style="margin-top:.8rem;font-size:.78rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-bottom:.5rem">تفاصيل المخالفات</div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr>
+          <th style="background:var(--cream);color:var(--muted);padding:7px 9px;text-align:right;font-size:.73rem;border-bottom:1.5px solid var(--border)">الوصف</th>
+          <th style="background:var(--cream);color:var(--muted);padding:7px 9px;text-align:right;font-size:.73rem;border-bottom:1.5px solid var(--border);width:130px">المبلغ (ج)</th>
+        </tr></thead>
+        <tbody id="fv-rows"></tbody>
+      </table>
+    </div>
+    <div class="form-footer">
+      <button class="btn btn-outline" onclick="buildFvRows()">↺ مسح</button>
+      <button class="btn btn-red" id="fv-save" onclick="saveViolation()">💾 حفظ المخالفات</button>
+    </div>
+  </div>
+</section>
 
-  // إضافة event listeners لمناطق السحب والإفلات
-  Object.keys(SHEET_MAPS).forEach(setupDropZone);
-}
-
-function switchImportTab(key) {
-  IMP.current = key;
-  document.querySelectorAll('.imp-tab').forEach((t, i) => {
-    t.classList.toggle('active', Object.keys(SHEET_MAPS)[i] === key);
-  });
-  Object.keys(SHEET_MAPS).forEach(k => {
-    const p = document.getElementById('imp-panel-' + k);
-    if (p) p.style.display = k === key ? '' : 'none';
-  });
-}
-
-function buildImportPanel(key, cfg) {
-  return `
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:1rem">
-      <div>
-        <div style="font-weight:700;font-size:.9rem">${cfg.icon} استيراد ${cfg.label}</div>
-        <div style="font-size:.75rem;color:var(--muted);margin-top:2px">
-          ارفع ملف Excel المُصدَّر من Google Sheets — الأعمدة المطلوبة: <strong>${cfg.headers.join(' | ')}</strong>
+<!-- ╔══════════════════════════════════════════╗ -->
+<!-- ║  ➕  ADD DEDUCTION                       ║ -->
+<!-- ╚══════════════════════════════════════════╝ -->
+<section class="section" id="add-d">
+  <div class="pg-head">
+    <div><div class="pg-title">تسجيل <em>خصم</em></div><div class="pg-sub">إضافة خصم جديد</div></div>
+  </div>
+  <div class="form-card">
+    <div class="form-card-head">💸 بيانات الخصم</div>
+    <div class="form-body">
+      <div class="form-grid">
+        <div class="fg"><label>التاريخ</label><input type="date" id="fd-date"></div>
+        <div class="fg"><label>اسم السائق</label><input type="text" id="fd-driver" list="dl-list" placeholder="ابدأ بالكتابة..."></div>
+        <div class="fg"><label>المبلغ (جنيه)</label><input type="number" id="fd-amount" min="0" step="0.01" placeholder="0"></div>
+        <div class="fg"><label>نوع الخصم</label>
+          <select id="fd-type">
+            <option>خصم شهري</option><option>خصم جماعي</option><option>خصم تأديبي</option>
+            <option>سداد مخالفة</option><option>خصم</option>
+          </select>
         </div>
       </div>
-      <button class="btn btn-outline btn-sm" onclick="downloadSample('${key}')">⬇ تحميل نموذج CSV</button>
     </div>
-
-    <div class="drop-zone" id="dz-${key}" onclick="document.getElementById('fi-${key}').click()">
-      <input type="file" id="fi-${key}" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleImportFile('${key}',this)">
-      <div class="drop-zone-icon">📂</div>
-      <div class="drop-zone-txt">اسحب ملف Excel / CSV هنا أو <strong>اضغط للاختيار</strong></div>
+    <div class="form-footer">
+      <button class="btn btn-green" id="fd-save" onclick="saveDeduction()">💾 حفظ الخصم</button>
     </div>
+  </div>
+</section>
 
-    <div class="import-preview" id="prev-${key}">
-      <div class="prev-title" id="prev-title-${key}"></div>
-      <div style="overflow-x:auto;max-height:260px;overflow-y:auto" id="prev-tbl-wrap-${key}"></div>
-      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-        <button class="btn btn-green" id="imp-btn-${key}" onclick="uploadToFirebase('${key}')">
-          🔥 رفع إلى Firebase
-        </button>
-        <button class="btn btn-outline btn-sm" onclick="clearImport('${key}')">🗑 إلغاء</button>
+<!-- ╔══════════════════════════════════════════╗ -->
+<!-- ║  🚨  VIOLATIONS LOG                      ║ -->
+<!-- ╚══════════════════════════════════════════╝ -->
+<section class="section" id="vlog">
+  <div class="pg-head">
+    <div><div class="pg-title">سجل <em>المخالفات</em></div></div>
+  </div>
+  <div class="toolbar">
+    <div class="search-wrap"><span class="search-icon">🔍</span>
+      <input type="text" placeholder="ابحث..." oninput="FILTERS.vlog=this.value;PG.vlog=1;renderVLog()">
+    </div>
+    <select class="flt" id="vs-driver" onchange="PG.vlog=1;renderVLog()"><option value="">كل السائقين</option></select>
+  </div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>#</th><th>التاريخ</th><th>السائق</th><th>رقم السيارة</th><th>الوصف</th><th>المبلغ</th><th>إجراء</th></tr></thead>
+    <tbody id="vlog-tbl"><tr><td colspan="7" class="tbl-loading"><span class="spinner"></span> جاري التحميل</td></tr></tbody>
+  </table>
+  <div class="pager" id="vlog-pager"></div></div>
+</section>
+
+<!-- ╔══════════════════════════════════════════╗ -->
+<!-- ║  💸  DEDUCTIONS LOG                      ║ -->
+<!-- ╚══════════════════════════════════════════╝ -->
+<section class="section" id="dlog">
+  <div class="pg-head">
+    <div><div class="pg-title">سجل <em>الخصومات</em></div></div>
+  </div>
+  <div class="toolbar">
+    <div class="search-wrap"><span class="search-icon">🔍</span>
+      <input type="text" placeholder="ابحث..." oninput="FILTERS.dlog=this.value;PG.dlog=1;renderDLog()">
+    </div>
+    <select class="flt" id="ds-driver" onchange="PG.dlog=1;renderDLog()"><option value="">كل السائقين</option></select>
+  </div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>#</th><th>التاريخ</th><th>السائق</th><th>المبلغ</th><th>النوع</th><th>إجراء</th></tr></thead>
+    <tbody id="dlog-tbl"><tr><td colspan="6" class="tbl-loading"><span class="spinner"></span> جاري التحميل</td></tr></tbody>
+  </table>
+  <div class="pager" id="dlog-pager"></div></div>
+</section>
+
+<!-- ╔══════════════════════════════════════════╗ -->
+<!-- ║  💰  ACCOUNTS                            ║ -->
+<!-- ╚══════════════════════════════════════════╝ -->
+<section class="section" id="acc">
+  <div class="pg-head">
+    <div><div class="pg-title">حسابات <em>السائقين</em></div></div>
+  </div>
+  <div class="toolbar">
+    <div class="search-wrap"><span class="search-icon">🔍</span>
+      <input type="text" placeholder="ابحث..." oninput="FILTERS.acc=this.value;renderAcc()">
+    </div>
+  </div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>#</th><th>السائق</th><th>إجمالي مخالفات</th><th>إجمالي خصومات</th><th>المتبقي</th></tr></thead>
+    <tbody id="acc-tbl"></tbody>
+    <tfoot><tr style="background:var(--cream);font-weight:700">
+      <td colspan="2" style="padding:10px 13px;font-size:.8rem">الإجمالي الكلي</td>
+      <td class="money-red" style="padding:10px 13px" id="acc-total-v">—</td>
+      <td class="money-grn" style="padding:10px 13px" id="acc-total-d">—</td>
+      <td class="money-gold" style="padding:10px 13px" id="acc-total-r">—</td>
+    </tr></tfoot>
+  </table></div>
+</section>
+
+<!-- ╔══════════════════════════════════════════╗ -->
+<!-- ║  📊  REPORTS                             ║ -->
+<!-- ╚══════════════════════════════════════════╝ -->
+<section class="section" id="reports">
+  <div class="pg-head">
+    <div><div class="pg-title">📊 <em>التقارير</em></div></div>
+    <button class="btn btn-green" onclick="exportToExcel()">⬇ تصدير Excel</button>
+  </div>
+  <div class="toolbar">
+    <div class="search-wrap"><span class="search-icon">🔍</span>
+      <input type="text" placeholder="ابحث..." oninput="FILTERS.rp=this.value;PG.rp=1;renderReport()">
+    </div>
+    <select class="flt" id="rp-driver" onchange="PG.rp=1;renderReport()"><option value="">كل السائقين</option></select>
+    <select class="flt" id="rp-type"   onchange="PG.rp=1;renderReport()">
+      <option value="">كل الأنواع</option><option>مخالفة</option><option>خصم</option>
+    </select>
+  </div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>#</th><th>التاريخ</th><th>السائق</th><th>السيارة</th><th>الوصف</th><th>المبلغ</th><th>النوع</th></tr></thead>
+    <tbody id="rp-tbl"></tbody>
+  </table>
+  <div class="pager" id="rp-pager"></div></div>
+</section>
+
+<!-- ╔══════════════════════════════════════════╗ -->
+<!-- ║  🪪  LICENSES                            ║ -->
+<!-- ╚══════════════════════════════════════════╝ -->
+<section class="section" id="licenses">
+  <div class="pg-head">
+    <div><div class="pg-title">إدارة <em class="teal">التراخيص</em></div><div class="pg-sub">متابعة تواريخ انتهاء تراخيص السيارات</div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-outline btn-sm" onclick="openAddLicense()">➕ إضافة ترخيص</button>
+      <button class="btn btn-teal" onclick="loadAll()">🔄 تحديث</button>
+    </div>
+  </div>
+  <div class="stats-row" style="margin-bottom:1rem">
+    <div class="stat teal"><div class="stat-label">سارية</div><div class="stat-val" id="ls-ok">—</div></div>
+    <div class="stat gold"><div class="stat-label">تنتهي خلال 30 يوم</div><div class="stat-val" id="ls-soon">—</div></div>
+    <div class="stat red"><div class="stat-label">منتهية</div><div class="stat-val" id="ls-exp">—</div></div>
+    <div class="stat blue"><div class="stat-label">إجمالي السيارات</div><div class="stat-val" id="ls-total">—</div></div>
+  </div>
+  <div class="lic-filter-tabs">
+    <button class="lic-tab active" onclick="setLicFilter('all',this)">📋 الكل</button>
+    <button class="lic-tab" onclick="setLicFilter('ساري',this)">✅ سارية</button>
+    <button class="lic-tab gold" onclick="setLicFilter('ينتهي قريباً',this)">⚠️ تنتهي قريباً</button>
+    <button class="lic-tab red"  onclick="setLicFilter('منتهي',this)">❌ منتهية</button>
+  </div>
+  <div class="toolbar">
+    <div class="search-wrap"><span class="search-icon">🔍</span>
+      <input type="text" id="lic-q" placeholder="ابحث برقم السيارة أو الشركة أو السائق..." oninput="renderLicenses()">
+    </div>
+  </div>
+  <div class="lic-grid" id="lic-cards"></div>
+  <div id="lic-empty" class="empty-state" style="display:none">
+    <div class="empty-icon">🪪</div><div class="empty-txt">لا توجد بيانات تراخيص</div>
+  </div>
+</section>
+
+<!-- ╔══════════════════════════════════════════╗ -->
+<!-- ║  📦  CUSTODY (العهد)                     ║ -->
+<!-- ╚══════════════════════════════════════════╝ -->
+<section class="section" id="custody">
+  <div class="pg-head">
+    <div><div class="pg-title">إدارة <em class="purple">العهد</em></div><div class="pg-sub">متابعة العهد الممنوحة للموظفين والسائقين</div></div>
+  </div>
+  <div class="stats-row">
+    <div class="stat purple"><div class="stat-label">إجمالي العهد</div><div class="stat-val" id="cust-total">—</div></div>
+    <div class="stat blue"><div class="stat-label">مسلّمة</div><div class="stat-val" id="cust-delivered">—</div></div>
+    <div class="stat teal"><div class="stat-label">مُعادة</div><div class="stat-val" id="cust-returned">—</div></div>
+    <div class="stat gold"><div class="stat-label">إجمالي القيمة</div><div class="stat-val" id="cust-value">—</div></div>
+  </div>
+  <div class="form-card">
+    <div class="form-card-head" style="background:var(--purple)">📦 إضافة عهدة جديدة</div>
+    <div class="form-body">
+      <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr">
+        <div class="fg"><label>التاريخ</label><input type="date" id="fc-date"></div>
+        <div class="fg"><label>الموظف / السائق</label><input type="text" id="fc-employee" list="dl-list" placeholder="الاسم"></div>
+        <div class="fg"><label>رقم السيارة</label><input type="text" id="fc-car" placeholder="اختياري"></div>
+        <div class="fg span2"><label>الصنف / البيان</label><input type="text" id="fc-item" placeholder="وصف العهدة"></div>
+        <div class="fg"><label>الحالة</label>
+          <select id="fc-status"><option>مسلّمة</option><option>مُعادة</option></select>
+        </div>
+        <div class="fg"><label>الكمية</label><input type="number" id="fc-qty" value="1" min="1"></div>
+        <div class="fg"><label>الوحدة</label><input type="text" id="fc-unit" value="قطعة"></div>
+        <div class="fg"><label>القيمة (ج)</label><input type="number" id="fc-value" min="0" placeholder="0"></div>
+        <div class="fg span2"><label>ملاحظات</label><input type="text" id="fc-notes" placeholder="اختياري"></div>
       </div>
     </div>
-
-    <div class="import-progress" id="prog-${key}">
-      <div class="progress-txt" id="prog-txt-${key}">جاري الرفع...</div>
-      <div class="progress-bar-wrap"><div class="progress-bar" id="prog-bar-${key}"></div></div>
+    <div class="form-footer">
+      <button class="btn btn-purple" id="fc-save" onclick="saveCustody()">💾 حفظ العهدة</button>
     </div>
+  </div>
+  <div class="toolbar">
+    <div class="search-wrap"><span class="search-icon">🔍</span>
+      <input type="text" placeholder="ابحث..." oninput="FILTERS.cust=this.value;PG.cust=1;renderCustody()">
+    </div>
+  </div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>#</th><th>التاريخ</th><th>الموظف</th><th>السيارة</th><th>الصنف</th><th>الكمية</th><th>القيمة</th><th>الحالة</th><th>إجراء</th></tr></thead>
+    <tbody id="cust-tbl"></tbody>
+  </table>
+  <div class="pager" id="cust-pager"></div></div>
+</section>
 
-    <div class="import-result" id="imp-result-${key}"></div>
-  `;
-}
+<!-- ╔══════════════════════════════════════════╗ -->
+<!-- ║  ✅  APPROVALS (الموافقات)               ║ -->
+<!-- ╚══════════════════════════════════════════╝ -->
+<section class="section" id="approvals">
+  <div class="pg-head">
+    <div><div class="pg-title">نظام <em class="green">الموافقات</em></div><div class="pg-sub">إدارة طلبات الموافقة</div></div>
+  </div>
+  <div class="stats-row">
+    <div class="stat blue"><div class="stat-label">إجمالي الطلبات</div><div class="stat-val" id="appr-total">—</div></div>
+    <div class="stat purple"><div class="stat-label">قيد المراجعة</div><div class="stat-val" id="appr-pending">—</div></div>
+    <div class="stat green"><div class="stat-label">تمت الموافقة</div><div class="stat-val" id="appr-approved">—</div></div>
+    <div class="stat red"><div class="stat-label">مرفوضة</div><div class="stat-val" id="appr-rejected">—</div></div>
+  </div>
+  <div class="form-card">
+    <div class="form-card-head" style="background:var(--g)">✅ طلب موافقة جديد</div>
+    <div class="form-body">
+      <div class="form-grid">
+        <div class="fg"><label>التاريخ</label><input type="date" id="fa-date"></div>
+        <div class="fg"><label>نوع الطلب</label>
+          <select id="fa-type">
+            <option>إجازة</option><option>سلفة</option><option>مهمة خارجية</option>
+            <option>صرف عهدة</option><option>إذن خروج</option><option>أخرى</option>
+          </select>
+        </div>
+        <div class="fg"><label>مقدم الطلب</label><input type="text" id="fa-requester" list="dl-list" placeholder="الاسم"></div>
+        <div class="fg"><label>الحالة الابتدائية</label>
+          <select id="fa-status"><option>قيد المراجعة</option><option>موافق</option><option>مرفوض</option></select>
+        </div>
+        <div class="fg span2"><label>الوصف / التفاصيل</label><input type="text" id="fa-desc" placeholder="تفاصيل الطلب"></div>
+        <div class="fg"><label>الموافق</label><input type="text" id="fa-approver" placeholder="اسم المسؤول"></div>
+        <div class="fg"><label>ملاحظات</label><input type="text" id="fa-notes" placeholder="اختياري"></div>
+      </div>
+    </div>
+    <div class="form-footer">
+      <button class="btn btn-green" id="fa-save" onclick="saveApproval()">💾 حفظ الطلب</button>
+    </div>
+  </div>
+  <div class="toolbar">
+    <div class="search-wrap"><span class="search-icon">🔍</span>
+      <input type="text" placeholder="ابحث..." oninput="FILTERS.appr=this.value;PG.appr=1;renderApprovals()">
+    </div>
+    <select class="flt" id="appr-status" onchange="PG.appr=1;renderApprovals()">
+      <option value="">كل الحالات</option><option>قيد المراجعة</option><option>موافق</option><option>مرفوض</option>
+    </select>
+  </div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>#</th><th>التاريخ</th><th>النوع</th><th>مقدم الطلب</th><th>الوصف</th><th>الحالة</th><th>إجراء</th></tr></thead>
+    <tbody id="appr-tbl"></tbody>
+  </table>
+  <div class="pager" id="appr-pager"></div></div>
+</section>
 
-function setupDropZone(key) {
-  const dz = document.getElementById('dz-' + key);
-  if (!dz) return;
-  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
-  dz.addEventListener('dragleave', () => dz.classList.remove('over'));
-  dz.addEventListener('drop', e => {
-    e.preventDefault();
-    dz.classList.remove('over');
-    const file = e.dataTransfer.files[0];
-    if (file) processImportFile(key, file);
-  });
-}
+<!-- ╔══════════════════════════════════════════╗ -->
+<!-- ║  🧾  INVOICES (الفواتير)                 ║ -->
+<!-- ╚══════════════════════════════════════════╝ -->
+<section class="section" id="invoices">
+  <div class="pg-head">
+    <div><div class="pg-title">إدارة <em class="orange">الفواتير</em></div></div>
+  </div>
+  <div class="stats-row">
+    <div class="stat orange"><div class="stat-label">إجمالي الفواتير</div><div class="stat-val" id="inv-total">—</div></div>
+    <div class="stat green"><div class="stat-label">مدفوعة</div><div class="stat-val" id="inv-paid">—</div></div>
+    <div class="stat gold"><div class="stat-label">معلقة</div><div class="stat-val" id="inv-pending">—</div></div>
+    <div class="stat blue"><div class="stat-label">إجمالي المبالغ</div><div class="stat-val" id="inv-sum">—</div></div>
+  </div>
+  <div class="form-card">
+    <div class="form-card-head" style="background:var(--orange)">🧾 فاتورة جديدة</div>
+    <div class="form-body">
+      <div class="form-grid">
+        <div class="fg"><label>التاريخ</label><input type="date" id="fi-date"></div>
+        <div class="fg"><label>العميل / الجهة</label><input type="text" id="fi-client" placeholder="اسم العميل أو الجهة"></div>
+        <div class="fg span2"><label>الوصف العام</label><input type="text" id="fi-desc" placeholder="اختياري"></div>
+        <div class="fg"><label>الحالة</label>
+          <select id="fi-status"><option>معلقة</option><option>مدفوعة</option><option>ملغاة</option></select>
+        </div>
+        <div class="fg"><label>ملاحظات</label><input type="text" id="fi-notes" placeholder="اختياري"></div>
+      </div>
+      <div style="margin-top:1rem;font-size:.78rem;font-weight:700;color:var(--muted);letter-spacing:.3px;margin-bottom:.5rem;text-transform:uppercase">بنود الفاتورة</div>
+      <table class="inv-items-table">
+        <thead><tr><th>البيان</th><th>الكمية</th><th>السعر (ج)</th><th>الإجمالي</th><th></th></tr></thead>
+        <tbody id="inv-items-body"></tbody>
+      </table>
+      <div class="inv-total-row">الإجمالي الكلي: <span id="inv-grand-total">0 ج</span></div>
+      <button class="btn btn-outline btn-sm" onclick="addInvItem()" style="margin-top:.6rem">➕ إضافة بند</button>
+    </div>
+    <div class="form-footer">
+      <button class="btn btn-orange" id="fi-save" onclick="saveInvoice()">💾 إنشاء الفاتورة</button>
+    </div>
+  </div>
+  <div class="toolbar">
+    <div class="search-wrap"><span class="search-icon">🔍</span>
+      <input type="text" placeholder="ابحث..." oninput="FILTERS.inv=this.value;PG.inv=1;renderInvoices()">
+    </div>
+    <select class="flt" id="inv-status" onchange="PG.inv=1;renderInvoices()">
+      <option value="">كل الحالات</option><option>معلقة</option><option>مدفوعة</option><option>ملغاة</option>
+    </select>
+  </div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>#</th><th>رقم الفاتورة</th><th>التاريخ</th><th>العميل</th><th>الوصف</th><th>الإجمالي</th><th>الحالة</th><th>إجراء</th></tr></thead>
+    <tbody id="inv-tbl"></tbody>
+  </table>
+  <div class="pager" id="inv-pager"></div></div>
+</section>
 
-// ── معالجة الملف ─────────────────────────────────────────
+<!-- ╔══════════════════════════════════════════╗ -->
+<!-- ║  📥  IMPORT                              ║ -->
+<!-- ╚══════════════════════════════════════════╝ -->
+<section class="section" id="import">
+  <div class="pg-head">
+    <div>
+      <div class="pg-title">📥 استيراد من <em>Google Sheets</em></div>
+      <div class="pg-sub">صدّر البيانات من جوجل شيت كـ Excel أو CSV ثم ارفعها مباشرة إلى Firebase</div>
+    </div>
+  </div>
 
-function handleImportFile(key, input) {
-  const file = input.files[0];
-  if (!file) return;
-  processImportFile(key, file);
-  input.value = '';
-}
+  <!-- شرح الخطوات -->
+  <div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--r);padding:1.2rem;margin-bottom:1.4rem">
+    <div style="font-weight:700;margin-bottom:.8rem;font-size:.9rem">📋 خطوات الاستيراد</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.8rem">
+      <div style="background:var(--cream);border-radius:8px;padding:12px;font-size:.8rem">
+        <div style="font-size:1.2rem;margin-bottom:4px">1️⃣</div>
+        <strong>صدّر من Google Sheets</strong><br>
+        <span style="color:var(--muted)">ملف ← تنزيل ← Microsoft Excel أو CSV</span>
+      </div>
+      <div style="background:var(--cream);border-radius:8px;padding:12px;font-size:.8rem">
+        <div style="font-size:1.2rem;margin-bottom:4px">2️⃣</div>
+        <strong>اختر نوع البيانات</strong><br>
+        <span style="color:var(--muted)">اضغط على التاب المناسب أدناه</span>
+      </div>
+      <div style="background:var(--cream);border-radius:8px;padding:12px;font-size:.8rem">
+        <div style="font-size:1.2rem;margin-bottom:4px">3️⃣</div>
+        <strong>ارفع الملف</strong><br>
+        <span style="color:var(--muted)">اسحب الملف أو اضغط للاختيار</span>
+      </div>
+      <div style="background:var(--cream);border-radius:8px;padding:12px;font-size:.8rem">
+        <div style="font-size:1.2rem;margin-bottom:4px">4️⃣</div>
+        <strong>ارفع إلى Firebase</strong><br>
+        <span style="color:var(--muted)">اضغط زر "رفع إلى Firebase"</span>
+      </div>
+    </div>
+    <div style="margin-top:1rem;padding:10px 14px;background:rgba(184,134,11,.08);border-radius:8px;font-size:.79rem;color:var(--gold);border:1px solid rgba(184,134,11,.2)">
+      ⚠️ <strong>ملاحظة:</strong> تأكد أن الصف الأول في ملفك هو صف الترويسة (العناوين) وأن البيانات تبدأ من الصف الثاني.
+      يمكنك تحميل نموذج CSV لكل نوع بيانات للتأكد من التنسيق الصحيح.
+    </div>
+  </div>
 
-function processImportFile(key, file) {
-  const reader = new FileReader();
-  const isCSV  = file.name.toLowerCase().endsWith('.csv');
+  <div id="imp-tab-bar" class="import-tabs"></div>
+  <div id="imp-panels"></div>
+</section>
 
-  reader.onload = e => {
-    try {
-      let rows;
-      if (isCSV) {
-        rows = parseCSV(e.target.result);
-      } else {
-        const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, dateNF: 'yyyy-mm-dd' });
-      }
+<!-- ╔══════════════════════════════════════════╗ -->
+<!-- ║  ⚙️  SETTINGS                             ║ -->
+<!-- ╚══════════════════════════════════════════╝ -->
+<section class="section" id="settings">
+  <div class="pg-head">
+    <div><div class="pg-title">⚙️ <em>الإعدادات</em></div><div class="pg-sub">إعدادات Firebase وقاعدة البيانات</div></div>
+  </div>
 
-      // تخطي الهيدر (أول صف)
-      const dataRows = rows.slice(1).filter(r => r.some(c => c !== '' && c !== null && c !== undefined));
-      if (!dataRows.length) { showImportResult(key, false, 'لم يتم العثور على بيانات في الملف'); return; }
+  <div class="settings-card">
+    <div class="settings-head">🔥 حالة Firebase</div>
+    <div class="settings-body">
+      <div id="fb-connect-status" class="firebase-status warn">جاري الفحص...</div>
+      <div style="font-size:.82rem;color:var(--muted);margin-bottom:.8rem">
+        لتهيئة Firebase، عدّل ملف <code style="background:var(--cream);padding:2px 6px;border-radius:4px">js/firebase-config.js</code>
+        وأضف بيانات مشروعك.
+      </div>
+      <div class="code-block"><span class="code-highlight">// js/firebase-config.js</span>
+const FIREBASE_CONFIG = {
+  apiKey:            <span class="code-highlight">"YOUR_API_KEY"</span>,
+  authDomain:        <span class="code-highlight">"YOUR_PROJECT_ID.firebaseapp.com"</span>,
+  projectId:         <span class="code-highlight">"YOUR_PROJECT_ID"</span>,
+  storageBucket:     <span class="code-highlight">"YOUR_PROJECT_ID.appspot.com"</span>,
+  messagingSenderId: <span class="code-highlight">"YOUR_MESSAGING_SENDER_ID"</span>,
+  appId:             <span class="code-highlight">"YOUR_APP_ID"</span>
+};</div>
+      <div style="margin-top:1rem;display:flex;gap:8px;flex-wrap:wrap">
+        <a href="https://console.firebase.google.com" target="_blank" class="btn btn-red">🔥 فتح Firebase Console</a>
+        <button class="btn btn-outline" onclick="location.reload()">🔄 إعادة الاتصال</button>
+      </div>
+    </div>
+  </div>
 
-      const cfg = SHEET_MAPS[key];
-      const transformed = dataRows.map(r => cfg.transform(r));
-      const valid   = transformed.filter(r => cfg.validate(r));
-      const invalid = transformed.length - valid.length;
+  <div class="settings-card">
+    <div class="settings-head">📂 مجموعات Firestore</div>
+    <div class="settings-body">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.6rem;font-size:.8rem">
+        ${['drivers','violations','deductions','licenses','custody','approvals','invoices'].map(c =>
+          `<div style="background:var(--cream);padding:8px 12px;border-radius:8px;display:flex;justify-content:space-between">
+            <span style="font-family:monospace;font-weight:700">${c}</span>
+          </div>`).join('')}
+      </div>
+      <div style="margin-top:.8rem;font-size:.78rem;color:var(--muted)">
+        يُنشئ النظام هذه المجموعات تلقائياً عند إضافة أول سجل.
+      </div>
+    </div>
+  </div>
 
-      IMP.parsed[key] = valid;
-      IMP.stats[key]  = { total: transformed.length, valid: valid.length, invalid };
-
-      showImportPreview(key, valid, invalid);
-    } catch (err) {
-      showImportResult(key, false, 'خطأ في قراءة الملف: ' + err.message);
+  <div class="settings-card">
+    <div class="settings-head">🛡 قواعد Firestore الموصى بها</div>
+    <div class="settings-body">
+      <div style="font-size:.8rem;color:var(--muted);margin-bottom:.6rem">أضف هذه القواعد في Firebase Console → Firestore → Rules</div>
+      <div class="code-block">rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: <span class="code-highlight">if true</span>; <span style="color:#666">// للتطوير فقط</span>
     }
-  };
-
-  if (isCSV) reader.readAsText(file, 'UTF-8');
-  else       reader.readAsArrayBuffer(file);
-}
-
-function parseCSV(text) {
-  return text.split('\n').map(line =>
-    line.split(',').map(cell => cell.trim().replace(/^"|"$/g, ''))
-  ).filter(r => r.length > 1);
-}
-
-// ── عرض المعاينة ──────────────────────────────────────────
-
-function showImportPreview(key, valid, invalidCount) {
-  const cfg   = SHEET_MAPS[key];
-  const prev  = document.getElementById('prev-' + key);
-  const title = document.getElementById('prev-title-' + key);
-  const wrap  = document.getElementById('prev-tbl-wrap-' + key);
-  const btn   = document.getElementById('imp-btn-' + key);
-
-  if (!prev) return;
-  prev.style.display = '';
-
-  const previewRows = valid.slice(0, 8);
-  const colKeys = cfg.columns;
-
-  title.innerHTML =
-    `<span style="color:var(--g);font-weight:700">✅ ${valid.length} سجل صالح</span>` +
-    (invalidCount > 0 ? ` &nbsp; <span style="color:var(--accent)">⚠️ ${invalidCount} تم تجاهلها</span>` : '') +
-    ` &nbsp; <span style="color:var(--muted);font-size:.76rem">(معاينة أول ${previewRows.length})</span>`;
-
-  wrap.innerHTML = `
-    <table style="width:100%;border-collapse:collapse;font-size:.78rem;min-width:400px">
-      <thead><tr>${cfg.headers.map(h => `<th style="background:var(--ink);color:#f5f0e8;padding:7px 10px;text-align:right;white-space:nowrap">${h}</th>`).join('')}</tr></thead>
-      <tbody>${previewRows.map(r =>
-        `<tr style="border-bottom:1px solid var(--cream)">${colKeys.map(c =>
-          `<td style="padding:6px 10px;background:#fff">${r[c] ?? '—'}</td>`
-        ).join('')}</tr>`
-      ).join('')}</tbody>
-    </table>
-  `;
-
-  if (btn) btn.textContent = `🔥 رفع ${valid.length} سجل إلى Firebase`;
-}
-
-// ── الرفع إلى Firebase ────────────────────────────────────
-
-async function uploadToFirebase(key) {
-  if (!FB_READY) { toast('⚠ اتصل بـ Firebase أولاً من الإعدادات', 'warn'); return; }
-  const rows = IMP.parsed[key];
-  if (!rows || !rows.length) { toast('⚠ لا توجد بيانات للرفع', 'warn'); return; }
-
-  const btn  = document.getElementById('imp-btn-' + key);
-  const prog = document.getElementById('prog-' + key);
-  const bar  = document.getElementById('prog-bar-' + key);
-  const txt  = document.getElementById('prog-txt-' + key);
-
-  if (btn)  btn.disabled = true;
-  if (prog) prog.style.display = '';
-  if (txt)  txt.textContent = `جاري رفع ${rows.length} سجل...`;
-
-  try {
-    await dbBatchImport(SHEET_MAPS[key].collection, rows, pct => {
-      if (bar) bar.style.width = pct + '%';
-      if (txt) txt.textContent = `جاري الرفع... ${pct}%`;
-    });
-
-    if (prog) prog.style.display = 'none';
-    showImportResult(key, true, `✅ تم رفع ${rows.length} سجل بنجاح إلى Firebase`);
-    clearImport(key);
-    toast(`✅ تم استيراد ${rows.length} سجل (${SHEET_MAPS[key].label})`, 'ok');
-    await loadAll();
-  } catch (err) {
-    if (prog) prog.style.display = 'none';
-    showImportResult(key, false, '❌ فشل الرفع: ' + err.message);
-    if (btn) btn.disabled = false;
   }
-}
+}</div>
+      <div style="margin-top:.6rem;font-size:.76rem;color:var(--accent)">⚠️ للإنتاج: قيّد الوصول بالمصادقة أو عناوين IP محددة.</div>
+    </div>
+  </div>
 
-function showImportResult(key, ok, msg) {
-  const el = document.getElementById('imp-result-' + key);
+  <div class="settings-card">
+    <div class="settings-head">📊 إحصائيات البيانات الحالية</div>
+    <div class="settings-body">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.6rem;font-size:.82rem" id="db-stats">
+        <div style="background:var(--cream);padding:8px 12px;border-radius:8px">جاري التحميل...</div>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="refreshDbStats()" style="margin-top:.8rem">🔄 تحديث الإحصائيات</button>
+    </div>
+  </div>
+</section>
+
+</div><!-- /content -->
+</div><!-- /app -->
+
+<!-- ══════════════════ MODALS ══════════════════ -->
+
+<!-- Driver Modal -->
+<div class="backdrop" id="m-driver">
+  <div class="modal"><div class="modal-head"><span class="modal-title" id="m-driver-title">➕ إضافة سائق</span><button class="modal-x" onclick="closeModal('m-driver')">×</button></div>
+  <div class="modal-body"><div class="form-grid">
+    <div class="fg"><label>اسم السائق</label><input type="text" id="md-name" placeholder="الاسم الكامل"></div>
+    <div class="fg"><label>رقم السيارة</label><input type="text" id="md-car" placeholder="رقم اللوحة"></div>
+  </div></div>
+  <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('m-driver')">إلغاء</button><button class="btn btn-blue" id="md-save" onclick="saveDriver()">💾 حفظ</button></div>
+  </div>
+</div>
+
+<!-- Edit Violation Modal -->
+<div class="backdrop" id="m-ev">
+  <div class="modal"><div class="modal-head"><span class="modal-title">✏ تعديل مخالفة</span><button class="modal-x" onclick="closeModal('m-ev')">×</button></div>
+  <div class="modal-body"><div class="form-grid">
+    <div class="fg"><label>التاريخ</label><input type="date" id="ev-date"></div>
+    <div class="fg"><label>السائق</label><input type="text" id="ev-driver" list="dl-list"></div>
+    <div class="fg"><label>رقم السيارة</label><input type="text" id="ev-car"></div>
+    <div class="fg"><label>المبلغ</label><input type="number" id="ev-amount" min="0"></div>
+    <div class="fg span2"><label>الوصف</label><input type="text" id="ev-desc"></div>
+  </div></div>
+  <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('m-ev')">إلغاء</button><button class="btn btn-red" id="ev-save" onclick="updateViolation()">💾 تحديث</button></div>
+  </div>
+</div>
+
+<!-- Edit Deduction Modal -->
+<div class="backdrop" id="m-ed">
+  <div class="modal"><div class="modal-head"><span class="modal-title">✏ تعديل خصم</span><button class="modal-x" onclick="closeModal('m-ed')">×</button></div>
+  <div class="modal-body"><div class="form-grid">
+    <div class="fg"><label>التاريخ</label><input type="date" id="ed-date"></div>
+    <div class="fg"><label>السائق</label><input type="text" id="ed-driver" list="dl-list"></div>
+    <div class="fg"><label>المبلغ</label><input type="number" id="ed-amount" min="0"></div>
+    <div class="fg"><label>النوع</label><input type="text" id="ed-type"></div>
+  </div></div>
+  <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('m-ed')">إلغاء</button><button class="btn btn-green" id="ed-save" onclick="updateDeduction()">💾 تحديث</button></div>
+  </div>
+</div>
+
+<!-- License Add/Edit Modal -->
+<div class="backdrop" id="m-license-form">
+  <div class="modal"><div class="modal-head" style="background:var(--teal)"><span class="modal-title" id="m-lic-title">➕ إضافة ترخيص</span><button class="modal-x" onclick="closeModal('m-license-form')">×</button></div>
+  <div class="modal-body"><div class="form-grid">
+    <div class="fg"><label>رقم السيارة ★</label><input type="text" id="ml-car" placeholder="رقم اللوحة"></div>
+    <div class="fg"><label>الشركة</label><input type="text" id="ml-company"></div>
+    <div class="fg"><label>نوع السيارة</label><input type="text" id="ml-cartype"></div>
+    <div class="fg"><label>رقم الشاسيه</label><input type="text" id="ml-chassis"></div>
+    <div class="fg"><label>السائق</label><input type="text" id="ml-driver" list="dl-list"></div>
+    <div class="fg"><label>تاريخ الانتهاء ★</label><input type="date" id="ml-expiry"></div>
+    <div class="fg span2"><label>ملاحظات</label><input type="text" id="ml-notes"></div>
+  </div></div>
+  <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('m-license-form')">إلغاء</button><button class="btn btn-teal" id="ml-save" onclick="saveLicenseForm()">💾 حفظ</button></div>
+  </div>
+</div>
+
+<!-- License Renew Modal -->
+<div class="backdrop" id="m-license-renew">
+  <div class="modal"><div class="modal-head" style="background:var(--teal)"><span class="modal-title">🔄 تجديد الترخيص</span><button class="modal-x" onclick="closeModal('m-license-renew')">×</button></div>
+  <div class="modal-body">
+    <div id="lic-modal-info" style="background:var(--cream);border-radius:8px;padding:12px 16px;margin-bottom:1rem;font-size:.84rem"></div>
+    <div class="fg"><label>تاريخ الانتهاء الجديد</label><input type="date" id="lic-new-date"></div>
+  </div>
+  <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('m-license-renew')">إلغاء</button><button class="btn btn-teal" id="lic-renew-btn" onclick="saveLicenseRenewal()">💾 حفظ التجديد</button></div>
+  </div>
+</div>
+
+<!-- Custody Edit Modal -->
+<div class="backdrop" id="m-custody">
+  <div class="modal wide"><div class="modal-head" style="background:var(--purple)"><span class="modal-title">✏ تعديل العهدة</span><button class="modal-x" onclick="closeModal('m-custody')">×</button></div>
+  <div class="modal-body"><div class="form-grid">
+    <div class="fg"><label>التاريخ</label><input type="date" id="fc2-date"></div>
+    <div class="fg"><label>الموظف</label><input type="text" id="fc2-employee" list="dl-list"></div>
+    <div class="fg"><label>رقم السيارة</label><input type="text" id="fc2-car"></div>
+    <div class="fg"><label>الحالة</label><select id="fc2-status"><option>مسلّمة</option><option>مُعادة</option></select></div>
+    <div class="fg span2"><label>الصنف</label><input type="text" id="fc2-item"></div>
+    <div class="fg"><label>الكمية</label><input type="number" id="fc2-qty" min="1"></div>
+    <div class="fg"><label>الوحدة</label><input type="text" id="fc2-unit"></div>
+    <div class="fg"><label>القيمة</label><input type="number" id="fc2-value" min="0"></div>
+    <div class="fg span2"><label>ملاحظات</label><input type="text" id="fc2-notes"></div>
+  </div></div>
+  <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('m-custody')">إلغاء</button><button class="btn btn-purple" id="fc2-save" onclick="updateCustody()">💾 تحديث</button></div>
+  </div>
+</div>
+
+<!-- Approval Edit Modal -->
+<div class="backdrop" id="m-approval">
+  <div class="modal wide"><div class="modal-head" style="background:var(--g)"><span class="modal-title">✏ تعديل الطلب</span><button class="modal-x" onclick="closeModal('m-approval')">×</button></div>
+  <div class="modal-body"><div class="form-grid">
+    <div class="fg"><label>التاريخ</label><input type="date" id="fa2-date"></div>
+    <div class="fg"><label>نوع الطلب</label><input type="text" id="fa2-type"></div>
+    <div class="fg"><label>مقدم الطلب</label><input type="text" id="fa2-requester" list="dl-list"></div>
+    <div class="fg"><label>الحالة</label><select id="fa2-status"><option>قيد المراجعة</option><option>موافق</option><option>مرفوض</option></select></div>
+    <div class="fg span2"><label>الوصف</label><input type="text" id="fa2-desc"></div>
+    <div class="fg"><label>الموافق</label><input type="text" id="fa2-approver"></div>
+    <div class="fg"><label>ملاحظات</label><input type="text" id="fa2-notes"></div>
+  </div></div>
+  <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('m-approval')">إلغاء</button><button class="btn btn-green" id="fa2-save" onclick="updateApproval()">💾 تحديث</button></div>
+  </div>
+</div>
+
+<!-- Invoice Edit Modal -->
+<div class="backdrop" id="m-invoice">
+  <div class="modal"><div class="modal-head" style="background:var(--orange)"><span class="modal-title">✏ تعديل الفاتورة</span><button class="modal-x" onclick="closeModal('m-invoice')">×</button></div>
+  <div class="modal-body"><div class="form-grid">
+    <div class="fg"><label>رقم الفاتورة</label><input type="text" id="fi2-num"></div>
+    <div class="fg"><label>التاريخ</label><input type="date" id="fi2-date"></div>
+    <div class="fg"><label>العميل</label><input type="text" id="fi2-client"></div>
+    <div class="fg"><label>الإجمالي</label><input type="number" id="fi2-total" min="0"></div>
+    <div class="fg span2"><label>الوصف</label><input type="text" id="fi2-desc"></div>
+    <div class="fg"><label>الحالة</label><select id="fi2-status"><option>معلقة</option><option>مدفوعة</option><option>ملغاة</option></select></div>
+    <div class="fg"><label>ملاحظات</label><input type="text" id="fi2-notes"></div>
+  </div></div>
+  <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('m-invoice')">إلغاء</button><button class="btn btn-orange" id="fi2-save" onclick="updateInvoice()">💾 تحديث</button></div>
+  </div>
+</div>
+
+<!-- Confirm Delete Modal -->
+<div class="backdrop" id="m-confirm">
+  <div class="modal" style="max-width:320px">
+    <div class="modal-head"><span class="modal-title">تأكيد الحذف</span><button class="modal-x" onclick="closeModal('m-confirm')">×</button></div>
+    <div class="modal-body"><div class="confirm-wrap">
+      <div class="confirm-icon">⚠️</div>
+      <div class="confirm-ttl">هل أنت متأكد؟</div>
+      <div class="confirm-msg">سيتم حذف هذا السجل نهائياً من Firebase ولا يمكن التراجع.</div>
+    </div></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('m-confirm')">إلغاء</button>
+      <button class="btn btn-red" id="confirm-del-btn">🗑 تأكيد الحذف</button>
+    </div>
+  </div>
+</div>
+
+<datalist id="dl-list"></datalist>
+<div id="toast"></div>
+
+<!-- ══════════════════ SCRIPTS ══════════════════ -->
+<script src="js/db.js"></script>
+<script src="js/import.js"></script>
+<script src="js/app.js"></script>
+<script>
+// إحصائيات DB في الإعدادات
+function refreshDbStats() {
+  const cols = ['drivers','violations','deductions','licenses','custody','approvals','invoices'];
+  const labels = {
+    drivers:'السائقون', violations:'المخالفات', deductions:'الخصومات',
+    licenses:'التراخيص', custody:'العهد', approvals:'الموافقات', invoices:'الفواتير'
+  };
+  const el = document.getElementById('db-stats');
   if (!el) return;
-  el.style.display = '';
-  el.className = 'import-result ' + (ok ? 'ok' : 'err');
-  el.textContent = msg;
-  setTimeout(() => { el.style.display = 'none'; }, 6000);
+  el.innerHTML = cols.map(c => `
+    <div style="background:var(--cream);padding:8px 12px;border-radius:8px;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:.78rem;color:var(--muted)">${labels[c]}</span>
+      <span style="font-family:'Readex Pro';font-weight:700;font-size:1.1rem;color:var(--ink)">${(DATA[c]||[]).length}</span>
+    </div>`).join('');
 }
-
-function clearImport(key) {
-  IMP.parsed[key] = null;
-  const prev = document.getElementById('prev-' + key);
-  if (prev) prev.style.display = 'none';
-  const prog = document.getElementById('prog-' + key);
-  if (prog) prog.style.display = 'none';
+// تحديث إحصائيات الإعدادات بعد كل loadAll
+const _origRenderAll = renderAll;
+function renderAll() {
+  _origRenderAll();
+  refreshDbStats();
+  updateSettingsUI();
 }
-
-// ── تحميل نموذج CSV ───────────────────────────────────────
-
-function downloadSample(key) {
-  const cfg = SHEET_MAPS[key];
-  const rows = [cfg.headers, cfg.sample];
-  const csv  = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  link.href  = URL.createObjectURL(blob);
-  link.download = `نموذج_${cfg.label}.csv`;
-  link.click();
-}
+</script>
+</body>
+</html>
