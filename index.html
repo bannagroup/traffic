@@ -1,1100 +1,382 @@
+// ============================================================
+// 📥 استيراد البيانات من Google Sheets (Excel / CSV)
+// ============================================================
 
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🚦 النظام المتكامل — السائقين والمخالفات والتراخيص</title>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Readex+Pro:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<style>
-:root{--ink:#0d1117;--paper:#f5f0e8;--cream:#ede8dc;--warm:#e8e0d0;--border:#c8bfaa;--muted:#8a7f70;--accent:#c0392b;--g:#2c6e49;--b:#1a4a7a;--gold:#b8860b;--teal:#0e7490;--shadow:rgba(13,17,23,.12);--r:10px}
-*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-html,body{scroll-behavior:smooth;height:100%}
-body{font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--paper);color:var(--ink);font-size:14px;line-height:1.6;display:flex;flex-direction:column}
-body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='.04'/%3E%3C/svg%3E");pointer-events:none;z-index:0}
-.app{position:relative;z-index:1;display:flex;flex-direction:column;height:100vh}
-.topbar{background:var(--ink);color:#f5f0e8;padding:0 1.5rem;display:flex;align-items:center;justify-content:space-between;height:52px;position:sticky;top:0;z-index:200;border-bottom:3px solid var(--accent)}
-.brand{display:flex;align-items:center;gap:10px;font-family:'Readex Pro',sans-serif;font-weight:700;font-size:.95rem;letter-spacing:-.3px}
-.brand-dot{width:10px;height:10px;background:var(--accent);border-radius:50%;animation:pulse 2s infinite}
-@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(192,57,43,.5)}50%{box-shadow:0 0 0 6px rgba(192,57,43,0)}}
-.topbar-nav{display:flex;gap:2px;flex-wrap:wrap}
-.tnav-btn{background:none;border:none;color:rgba(245,240,232,.55);font-family:'IBM Plex Sans Arabic',sans-serif;font-size:.78rem;font-weight:600;padding:7px 10px;cursor:pointer;border-radius:6px;transition:all .2s;position:relative}
-.tnav-btn.active,.tnav-btn:hover{color:#f5f0e8;background:rgba(255,255,255,.08)}
-.tnav-btn.active::after{content:'';position:absolute;bottom:-3px;left:0;right:0;height:3px;background:var(--accent)}
-.tnav-btn.teal.active::after{background:var(--teal)}
-.status-bar{background:#1e2a3a;color:#a8c4e0;padding:6px 1.5rem;display:flex;align-items:center;gap:10px;font-size:.75rem;border-bottom:1px solid #2a3a4a}
-.status-dot{width:8px;height:8px;border-radius:50%;background:#6b7280;flex-shrink:0}
-.status-dot.ok{background:#22c55e;box-shadow:0 0 6px rgba(34,197,94,.5)}
-.status-dot.err{background:#ef4444}
-.status-dot.loading{background:#f59e0b;animation:pulse 1s infinite}
-.content{flex:1;padding:1.5rem;width:100%;overflow-y:auto}
-.section{display:none}
-.section.active{display:block;animation:slideUp .3s ease}
-@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-.pg-head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:2px solid var(--border);flex-wrap:wrap;gap:8px}
-.pg-title{font-family:'Readex Pro',sans-serif;font-size:1.35rem;font-weight:700;letter-spacing:-.5px}
-.pg-title em{font-style:normal;color:var(--accent)}
-.pg-title em.teal{color:var(--teal)}
-.pg-sub{color:var(--muted);font-size:.78rem;margin-top:3px}
-.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.85rem;margin-bottom:1.75rem}
-.stat{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:1rem 1.2rem;position:relative;overflow:hidden;transition:transform .2s,box-shadow .2s}
-.stat:hover{transform:translateY(-2px);box-shadow:0 6px 18px var(--shadow)}
-.stat::before{content:'';position:absolute;top:0;right:0;width:4px;height:100%}
-.stat.red::before{background:var(--accent)}.stat.green::before{background:var(--g)}.stat.blue::before{background:var(--b)}.stat.gold::before{background:var(--gold)}.stat.teal::before{background:var(--teal)}
-.stat-label{font-size:.7rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
-.stat-val{font-family:'Readex Pro',sans-serif;font-size:1.6rem;font-weight:700;line-height:1}
-.stat.red .stat-val{color:var(--accent)}.stat.green .stat-val{color:var(--g)}.stat.blue .stat-val{color:var(--b)}.stat.gold .stat-val{color:var(--gold)}.stat.teal .stat-val{color:var(--teal)}
-.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:1rem}
-.search-wrap{flex:1;min-width:220px;position:relative}
-.search-wrap input{width:100%;background:#fff;border:1.5px solid var(--border);border-radius:8px;padding:8px 12px 8px 34px;font-family:'IBM Plex Sans Arabic',sans-serif;font-size:.85rem;color:var(--ink);outline:none;transition:border-color .2s,box-shadow .2s}
-.search-wrap input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(192,57,43,.08)}
-.search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:.8rem;pointer-events:none;color:var(--muted)}
-.search-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:.75rem;cursor:pointer;color:var(--muted);background:var(--cream);border:none;border-radius:50%;width:18px;height:18px;display:none;align-items:center;justify-content:center;line-height:1;padding:0;transition:background .15s}
-.search-clear:hover{background:var(--border)}
-.search-clear.visible{display:flex}
-.ac-dropdown{position:absolute;top:calc(100% + 4px);left:0;right:0;background:#fff;border:1.5px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(13,17,23,.18);z-index:9999;display:none;overflow:hidden;max-height:280px;overflow-y:auto}
-.ac-dropdown.open{display:block;animation:acDrop .18s ease}
-@keyframes acDrop{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
-.ac-item{display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;font-size:.84rem;transition:background .12s;border-bottom:1px solid var(--cream)}
-.ac-item:last-child{border-bottom:none}
-.ac-item:hover,.ac-item.highlighted{background:rgba(192,57,43,.06)}
-.ac-item mark{background:rgba(192,57,43,.15);color:var(--accent);border-radius:2px;padding:0 2px;font-style:normal}
-.ac-icon{font-size:.75rem;opacity:.5;flex-shrink:0}
-.ac-label{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
-.ac-meta{font-size:.72rem;color:var(--muted);flex-shrink:0}
-.ac-section-head{padding:6px 14px;font-size:.68rem;font-weight:700;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;background:var(--cream);border-bottom:1px solid var(--border)}
-.ac-empty-msg{padding:14px;text-align:center;color:var(--muted);font-size:.82rem}
-.btn{padding:8px 16px;border-radius:8px;border:none;font-family:'IBM Plex Sans Arabic',sans-serif;font-size:.8rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:all .18s;white-space:nowrap}
-.btn-red{background:var(--accent);color:#fff;box-shadow:0 3px 10px rgba(192,57,43,.25)}
-.btn-red:hover{background:#a93226;transform:translateY(-1px)}
-.btn-green{background:var(--g);color:#fff;box-shadow:0 3px 10px rgba(44,110,73,.25)}
-.btn-green:hover{background:#235a3b;transform:translateY(-1px)}
-.btn-blue{background:var(--b);color:#fff;box-shadow:0 3px 10px rgba(26,74,122,.25)}
-.btn-blue:hover{background:#153d66;transform:translateY(-1px)}
-.btn-gold{background:var(--gold);color:#fff}
-.btn-gold:hover{background:#9a6e09;transform:translateY(-1px)}
-.btn-teal{background:var(--teal);color:#fff;box-shadow:0 3px 10px rgba(14,116,144,.25)}
-.btn-teal:hover{background:#0c6478;transform:translateY(-1px)}
-.btn-outline{background:#fff;color:var(--ink);border:1.5px solid var(--border)}
-.btn-outline:hover{border-color:var(--ink)}
-.btn-sm{padding:5px 10px;font-size:.74rem;border-radius:6px}
-.btn-edit-sm{background:rgba(26,74,122,.08);color:var(--b);border:1px solid rgba(26,74,122,.18)}
-.btn-edit-sm:hover{background:rgba(26,74,122,.15)}
-.btn-del-sm{background:rgba(192,57,43,.07);color:var(--accent);border:1px solid rgba(192,57,43,.15)}
-.btn-del-sm:hover{background:rgba(192,57,43,.15)}
-.btn:disabled{opacity:.5;cursor:not-allowed;transform:none!important}
-.tbl-wrap{background:#fff;border:1.5px solid var(--border);border-radius:var(--r);overflow:hidden;box-shadow:0 2px 8px var(--shadow);overflow-x:auto}
-table{width:100%;border-collapse:collapse;font-size:.83rem;min-width:400px}
-thead th{background:var(--ink);color:#f5f0e8;padding:11px 14px;text-align:right;font-weight:600;font-size:.75rem;letter-spacing:.3px;white-space:nowrap}
-tbody tr{border-bottom:1px solid var(--cream);transition:background .12s}
-tbody tr:last-child{border-bottom:none}
-tbody tr:hover{background:var(--cream)}
-tbody td{padding:10px 14px;vertical-align:middle}
-.num-cell{color:var(--muted);font-size:.75rem}
-.driver-cell{font-weight:600}
-.car-cell{color:var(--muted);font-family:monospace;font-size:.8rem}
-.desc-cell{color:#555}
-.money-red{color:var(--accent);font-weight:700;font-family:'Readex Pro',sans-serif}
-.money-grn{color:var(--g);font-weight:700;font-family:'Readex Pro',sans-serif}
-.money-gold{color:var(--gold);font-weight:700;font-family:'Readex Pro',sans-serif}
-.tag{display:inline-block;padding:2px 9px;border-radius:20px;font-size:.7rem;font-weight:700}
-.tag-v{background:rgba(192,57,43,.1);color:var(--accent)}
-.tag-d{background:rgba(44,110,73,.1);color:var(--g)}
-.tag-ok{background:rgba(44,110,73,.1);color:var(--g)}
-.tag-warn{background:rgba(184,134,11,.1);color:var(--gold)}
-.tag-expired{background:rgba(192,57,43,.1);color:var(--accent)}
-tbody tr.search-match{background:rgba(192,57,43,.04);border-right:3px solid var(--accent)}
-.empty-state{text-align:center;padding:3rem 2rem;color:var(--muted)}
-.empty-icon{font-size:2.2rem;margin-bottom:.6rem;opacity:.5}
-.empty-txt{font-size:.85rem}
-.tbl-loading{text-align:center;padding:2.5rem;color:var(--muted);font-size:.88rem}
-.spinner{display:inline-block;width:20px;height:20px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px}
-@keyframes spin{to{transform:rotate(360deg)}}
-.pager{display:flex;align-items:center;gap:4px;justify-content:center;padding:.85rem;border-top:1px solid var(--cream);background:var(--paper)}
-.pg-btn{min-width:30px;height:30px;border-radius:6px;border:1.5px solid var(--border);background:#fff;color:var(--muted);font-family:'Readex Pro',sans-serif;font-size:.78rem;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center}
-.pg-btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
-.pg-btn.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
-.pg-btn:disabled{opacity:.3;cursor:default}
-.form-card{background:#fff;border:1.5px solid var(--border);border-radius:var(--r);overflow:hidden;box-shadow:0 2px 8px var(--shadow);margin-bottom:1.5rem}
-.form-card-head{background:var(--ink);color:#f5f0e8;padding:12px 18px;font-weight:700;font-size:.9rem;display:flex;align-items:center;gap:8px}
-.form-body{padding:1.25rem}
-.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:.85rem}
-.fg{display:flex;flex-direction:column;gap:5px}
-.fg.span2{grid-column:span 2}
-.fg label{font-size:.73rem;font-weight:700;color:var(--muted);letter-spacing:.3px;text-transform:uppercase}
-.fg input,.fg select,.fg textarea{background:var(--paper);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;font-family:'IBM Plex Sans Arabic',sans-serif;font-size:.85rem;color:var(--ink);outline:none;transition:border-color .2s,box-shadow .2s;width:100%}
-.fg input:focus,.fg select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(192,57,43,.07);background:#fff}
-.multi-table{width:100%;border-collapse:collapse;margin-top:.5rem}
-.multi-table th{background:var(--cream);color:var(--muted);padding:7px 9px;text-align:right;font-size:.73rem;font-weight:700;border-bottom:1.5px solid var(--border)}
-.multi-table td{padding:4px 5px}
-.multi-table input{background:#fff;border:1px solid var(--border);border-radius:5px;padding:6px 8px;font-family:'IBM Plex Sans Arabic',sans-serif;font-size:.83rem;color:var(--ink);width:100%;outline:none;transition:border-color .2s}
-.multi-table input:focus{border-color:var(--accent)}
-.form-footer{display:flex;gap:10px;justify-content:flex-end;padding:.85rem 1.25rem;border-top:1px solid var(--cream);background:var(--paper);flex-wrap:wrap}
-/* IMPORT */
-.import-panel{background:#fff;border:1.5px solid var(--border);border-radius:var(--r);padding:1.25rem;margin-bottom:1.5rem}
-.import-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:1rem;font-weight:700;font-size:.9rem}
-.drop-zone{border:2.5px dashed var(--border);border-radius:10px;padding:1.8rem;text-align:center;cursor:pointer;transition:all .2s;background:var(--paper)}
-.drop-zone:hover,.drop-zone.over{border-color:var(--accent);background:rgba(192,57,43,.04)}
-.drop-zone-icon{font-size:2rem;opacity:.55;margin-bottom:.4rem}
-.drop-zone-txt{font-size:.84rem;color:var(--muted)}
-.drop-zone-txt strong{color:var(--accent)}
-.import-preview-wrap{margin-top:1rem;display:none}
-.import-preview-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem;flex-wrap:wrap;gap:8px}
-.istats{display:flex;gap:8px;flex-wrap:wrap;font-size:.75rem}
-.is{padding:3px 9px;border-radius:20px;font-weight:700}
-.is-ok{background:rgba(44,110,73,.1);color:var(--g)}
-.is-dup{background:rgba(184,134,11,.1);color:var(--gold)}
-.is-err{background:rgba(192,57,43,.1);color:var(--accent)}
-/* FIELD AC */
-.field-ac-wrap{position:relative;width:100%}
-.field-ac-wrap input{width:100%;background:var(--paper);border:1.5px solid var(--border);border-radius:7px;padding:8px 36px 8px 11px;font-family:'IBM Plex Sans Arabic',sans-serif;font-size:.85rem;color:var(--ink);outline:none;transition:border-color .2s,box-shadow .2s}
-.field-ac-wrap input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(192,57,43,.07);background:#fff}
-.field-ac-wrap input.selected-valid{border-color:var(--g);background:#f0faf4}
-.field-ac-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:.85rem;pointer-events:none;color:var(--muted)}
-.field-ac-clear{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted);font-size:1rem;line-height:1;padding:0;display:none;transition:color .15s}
-.field-ac-clear:hover{color:var(--accent)}
-.field-ac-clear.visible{display:block}
-.field-ac-drop{position:absolute;top:calc(100% + 5px);left:0;right:0;background:#fff;border:1.5px solid var(--border);border-radius:10px;box-shadow:0 10px 28px rgba(13,17,23,.18);z-index:9999;display:none;overflow:hidden;max-height:280px;overflow-y:auto}
-.field-ac-drop.open{display:block;animation:acDrop .18s ease}
-.field-ac-drop .ac-section-head{padding:5px 12px;font-size:.67rem;font-weight:800;color:var(--muted);letter-spacing:.6px;text-transform:uppercase;background:var(--cream);border-bottom:1px solid var(--border)}
-.field-ac-drop .ac-row{display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;font-size:.84rem;transition:background .12s;border-bottom:1px solid var(--cream)}
-.field-ac-drop .ac-row:last-child{border-bottom:none}
-.field-ac-drop .ac-row:hover,.field-ac-drop .ac-row.hi{background:rgba(192,57,43,.07)}
-.field-ac-drop .ac-row .ac-main{flex:1;font-weight:600;color:var(--ink)}
-.field-ac-drop .ac-row .ac-sub{font-size:.75rem;color:var(--muted);flex-shrink:0}
-.field-ac-drop .ac-row mark{background:rgba(192,57,43,.18);color:var(--accent);border-radius:2px;padding:0 2px;font-style:normal}
-.field-ac-drop .ac-empty{padding:14px;text-align:center;color:var(--muted);font-size:.82rem}
-.selected-badge{display:inline-flex;align-items:center;gap:6px;margin-top:4px;background:rgba(44,110,73,.1);color:var(--g);border:1px solid rgba(44,110,73,.2);border-radius:20px;padding:3px 10px;font-size:.73rem;font-weight:700}
-/* DED CARDS */
-.ded-drivers-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1rem;margin-bottom:1.5rem}
-.ded-card{background:#fff;border:1.5px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 2px 8px var(--shadow);transition:transform .2s,box-shadow .2s}
-.ded-card:hover{transform:translateY(-2px);box-shadow:0 6px 18px var(--shadow)}
-.ded-card-head{padding:12px 16px;background:var(--cream);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
-.ded-card-name{font-weight:700;font-size:.9rem}
-.ded-card-car{font-size:.75rem;color:var(--muted);font-family:monospace}
-.ded-card-body{padding:14px 16px}
-.ded-save-btn{width:100%;justify-content:center;font-size:.82rem;padding:8px}
-/* MONTHLY REPORT */
-.monthly-card{background:#fff;border:1.5px solid var(--border);border-radius:var(--r);padding:1rem;margin-bottom:1rem;display:flex;align-items:center;flex-wrap:wrap;gap:12px}
-.monthly-card select,.monthly-card input[type=number]{padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:'IBM Plex Sans Arabic',sans-serif;font-size:.83rem;background:#fff;outline:none}
-.monthly-card select:focus,.monthly-card input:focus{border-color:var(--accent)}
-.report-stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.85rem;margin-bottom:1.25rem}
-.rstat{background:var(--cream);border-radius:var(--r);padding:1rem;text-align:center}
-.rstat-label{font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:5px}
-.rstat-val{font-family:'Readex Pro',sans-serif;font-size:1.4rem;font-weight:700}
-/* LICENSE CARDS */
-.lic-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem;margin-bottom:1.5rem}
-.lic-card{background:#fff;border:1.5px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 2px 8px var(--shadow);transition:transform .2s,box-shadow .2s}
-.lic-card:hover{transform:translateY(-2px);box-shadow:0 6px 18px var(--shadow)}
-.lic-card.expired{border-color:rgba(192,57,43,.4);background:rgba(192,57,43,.02)}
-.lic-card.soon{border-color:rgba(184,134,11,.4);background:rgba(184,134,11,.02)}
-.lic-card-head{padding:10px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
-.lic-card-head.expired{background:rgba(192,57,43,.07)}
-.lic-card-head.soon{background:rgba(184,134,11,.07)}
-.lic-card-head.ok{background:rgba(44,110,73,.05)}
-.lic-car-num{font-family:monospace;font-size:1rem;font-weight:800;letter-spacing:.5px}
-.lic-card-body{padding:12px 14px;display:flex;flex-direction:column;gap:6px}
-.lic-row{display:flex;justify-content:space-between;font-size:.8rem}
-.lic-lbl{color:var(--muted);font-weight:600}
-.lic-val{font-weight:600}
-.lic-expiry{font-family:'Readex Pro',sans-serif;font-size:1rem;font-weight:700}
-.lic-expiry.expired{color:var(--accent)}
-.lic-expiry.soon{color:var(--gold)}
-.lic-expiry.ok{color:var(--g)}
-.lic-card-foot{padding:8px 14px;border-top:1px solid var(--border);background:var(--paper)}
-.lic-filter-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1rem}
-.lic-tab{padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:#fff;font-family:'IBM Plex Sans Arabic',sans-serif;font-size:.78rem;font-weight:700;cursor:pointer;transition:all .2s;color:var(--muted)}
-.lic-tab:hover{border-color:var(--teal);color:var(--teal)}
-.lic-tab.active{background:var(--teal);border-color:var(--teal);color:#fff}
-.lic-tab.active.red{background:var(--accent);border-color:var(--accent)}
-.lic-tab.active.gold{background:var(--gold);border-color:var(--gold)}
-/* MODAL */
-.backdrop{position:fixed;inset:0;background:rgba(13,17,23,.55);backdrop-filter:blur(4px);z-index:300;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .25s}
-.backdrop.open{opacity:1;pointer-events:all}
-.modal{background:#fff;border-radius:14px;width:92%;max-width:500px;box-shadow:0 20px 50px rgba(13,17,23,.3);transform:scale(.95) translateY(8px);transition:transform .25s;overflow:hidden}
-.backdrop.open .modal{transform:scale(1) translateY(0)}
-.modal-head{background:var(--ink);color:#f5f0e8;padding:14px 18px;display:flex;align-items:center;justify-content:space-between}
-.modal-title{font-weight:700;font-size:.9rem}
-.modal-x{background:none;border:none;color:rgba(245,240,232,.5);font-size:1.2rem;cursor:pointer;line-height:1;transition:color .15s}
-.modal-x:hover{color:#f5f0e8}
-.modal-body{padding:1.25rem;max-height:70vh;overflow-y:auto}
-.modal-footer{padding:.9rem 1.25rem;border-top:1px solid var(--cream);display:flex;gap:9px;justify-content:flex-end;flex-wrap:wrap}
-.confirm-wrap{text-align:center;padding:.5rem 0}
-.confirm-icon{font-size:2rem;margin-bottom:.5rem}
-.confirm-ttl{font-weight:800;font-size:.95rem;margin-bottom:.4rem}
-.confirm-msg{color:var(--muted);font-size:.82rem;line-height:1.5}
-.dup-list{background:var(--cream);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-top:10px;font-size:.8rem;max-height:160px;overflow-y:auto}
-.dup-list li{padding:4px 0;border-bottom:1px dashed var(--border);display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.dup-list li:last-child{border-bottom:none}
-.bulk-summary-box{background:var(--cream);border:1.5px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:1rem;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;text-align:center}
-.bulk-sum-item .lbl{font-size:.68rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px}
-.bulk-sum-item .val{font-family:'Readex Pro',sans-serif;font-size:1.1rem;font-weight:700}
-#toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(60px);background:var(--ink);color:#f5f0e8;padding:10px 18px;border-radius:9px;font-size:.82rem;font-weight:600;display:flex;align-items:center;gap:8px;z-index:9999;pointer-events:none;opacity:0;transition:transform .3s cubic-bezier(.34,1.56,.64,1),opacity .3s;box-shadow:0 6px 20px rgba(13,17,23,.3);border-right:4px solid var(--accent)}
-#toast.show{transform:translateX(-50%) translateY(0);opacity:1}
-#toast.ok{border-right-color:var(--g)}#toast.warn{border-right-color:var(--gold)}#toast.err{border-right-color:var(--accent)}
-select.flt{background:#fff;border:1.5px solid var(--border);border-radius:8px;padding:8px 11px;font-family:'IBM Plex Sans Arabic',sans-serif;font-size:.83rem;color:var(--ink);outline:none;cursor:pointer;transition:border-color .2s}
-select.flt:focus{border-color:var(--accent)}
-@media(max-width:640px){.form-grid{grid-template-columns:1fr}.fg.span2{grid-column:span 1}.topbar{padding:0 .75rem}.content{padding:.85rem}.bulk-summary-box{grid-template-columns:1fr 1fr}.ded-drivers-grid{grid-template-columns:1fr}.lic-grid{grid-template-columns:1fr}}
-</style>
-</head>
-<body>
-<div class="app">
-<header class="topbar">
-  <div class="brand"><div class="brand-dot"></div>النظام المتكامل</div>
-  <nav class="topbar-nav">
-    <button class="tnav-btn active" onclick="show('dash')" id="tn-dash">🏠 الرئيسية</button>
-    <button class="tnav-btn" onclick="show('drivers')" id="tn-drivers">👤 السائقون</button>
-    <button class="tnav-btn" onclick="show('add-v')" id="tn-add-v">➕ مخالفة</button>
-    <button class="tnav-btn" onclick="show('add-d')" id="tn-add-d">➕ خصم</button>
-    <button class="tnav-btn" onclick="show('vlog')" id="tn-vlog">🚨 المخالفات</button>
-    <button class="tnav-btn" onclick="show('dlog')" id="tn-dlog">💸 الخصومات</button>
-    <button class="tnav-btn" onclick="show('acc')" id="tn-acc">💰 الحسابات</button>
-    <button class="tnav-btn" onclick="show('reports')" id="tn-reports">📊 التقارير</button>
-    <button class="tnav-btn teal" onclick="show('licenses')" id="tn-licenses">🪪 التراخيص</button>
-  </nav>
-</header>
-<div class="status-bar">
-  <div class="status-dot loading" id="status-dot"></div>
-  <span id="status-txt">جاري تحميل البيانات...</span>
-  <button class="btn btn-outline btn-sm" onclick="loadAll()" style="margin-right:auto;font-size:.72rem;padding:4px 10px">🔄 تحديث</button>
-  <button class="btn btn-outline btn-sm" onclick="exportToExcel()" style="font-size:.72rem;padding:4px 10px">📊 تصدير Excel</button>
-  <label style="cursor:pointer"><span class="btn btn-outline btn-sm" style="font-size:.72rem;padding:4px 10px">📥 استيراد Excel</span><input type="file" id="import-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleImportFile(this)"></label>
-</div>
-<div id="gas-warning" style="display:none;background:#7c2d12;color:#fef3c7;padding:10px 1.5rem;font-size:.82rem;font-weight:600;text-align:center;border-bottom:2px solid #b45309">
-  ⚠️ لا يوجد اتصال بـ Google Apps Script — افتح هذا الملف من داخل Google Spreadsheet من: <strong>الإضافات ← Apps Script ← تشغيل التطبيق</strong>
-</div>
-<div class="content">
+// خريطة الأعمدة لكل نوع بيانات
+const SHEET_MAPS = {
+  drivers: {
+    label: 'السائقون والسيارات',
+    icon: '👤',
+    collection: 'drivers',
+    columns: ['name', 'car'],
+    headers: ['اسم السائق', 'رقم السيارة'],
+    sample: ['محمد أحمد', 'أ ب ج 1234'],
+    transform: (row) => ({
+      name: ss(row[0]),
+      car:  ss(row[1])
+    }),
+    validate: (r) => !!r.name
+  },
+  violations: {
+    label: 'المخالفات',
+    icon: '🚨',
+    collection: 'violations',
+    columns: ['date', 'driver', 'car', 'desc', 'amount'],
+    headers: ['التاريخ', 'اسم السائق', 'رقم السيارة', 'الوصف', 'المبلغ'],
+    sample: ['2024-01-15', 'محمد أحمد', 'أ ب ج 1234', 'سرعة زائدة', '500'],
+    transform: (row) => ({
+      date:   toISO(row[0]) || '',
+      driver: ss(row[1]),
+      car:    ss(row[2]),
+      desc:   ss(row[3]),
+      amount: Number(row[4]) || 0
+    }),
+    validate: (r) => !!r.driver && r.amount > 0
+  },
+  deductions: {
+    label: 'الخصومات',
+    icon: '💸',
+    collection: 'deductions',
+    columns: ['date', 'driver', 'amount', 'type'],
+    headers: ['التاريخ', 'اسم السائق', 'المبلغ', 'النوع'],
+    sample: ['2024-01-20', 'محمد أحمد', '1000', 'خصم شهري'],
+    transform: (row) => ({
+      date:   toISO(row[0]) || '',
+      driver: ss(row[1]),
+      amount: Number(row[2]) || 0,
+      type:   ss(row[3]) || 'خصم'
+    }),
+    validate: (r) => !!r.driver && r.amount > 0
+  },
+  licenses: {
+    label: 'التراخيص',
+    icon: '🪪',
+    collection: 'licenses',
+    columns: ['carNumber', 'company', 'carType', 'chassis', 'driver', 'expiry', 'notes'],
+    headers: ['رقم السيارة', 'الشركة', 'نوع السيارة', 'رقم الشاسيه', 'السائق', 'تاريخ الانتهاء', 'ملاحظات'],
+    sample: ['أ ب ج 1234', 'شركة النقل', 'نقل', 'ABC123', 'محمد أحمد', '2025-06-30', ''],
+    transform: (row) => {
+      const expiry = toISO(row[5]) || '';
+      const { status, diffDays } = calcLicenseStatus(expiry);
+      return {
+        carNumber: ss(row[0]),
+        company:   ss(row[1]),
+        carType:   ss(row[2]),
+        chassis:   ss(row[3]),
+        driver:    ss(row[4]),
+        expiry,
+        notes:     ss(row[6]),
+        status,
+        diffDays
+      };
+    },
+    validate: (r) => !!r.carNumber
+  },
+  custody: {
+    label: 'العهد',
+    icon: '📦',
+    collection: 'custody',
+    columns: ['date', 'employee', 'car', 'itemDesc', 'quantity', 'unit', 'value', 'status', 'notes'],
+    headers: ['التاريخ', 'الموظف', 'رقم السيارة', 'الصنف', 'الكمية', 'الوحدة', 'القيمة', 'الحالة', 'ملاحظات'],
+    sample: ['2024-01-10', 'محمد أحمد', 'أ ب ج 1234', 'إطار احتياطي', '2', 'قطعة', '800', 'مسلّمة', ''],
+    transform: (row) => ({
+      date:     toISO(row[0]) || '',
+      employee: ss(row[1]),
+      car:      ss(row[2]),
+      itemDesc: ss(row[3]),
+      quantity: Number(row[4]) || 1,
+      unit:     ss(row[5]) || 'قطعة',
+      value:    Number(row[6]) || 0,
+      status:   ss(row[7]) || 'مسلّمة',
+      notes:    ss(row[8])
+    }),
+    validate: (r) => !!r.employee && !!r.itemDesc
+  },
+  approvals: {
+    label: 'الموافقات',
+    icon: '✅',
+    collection: 'approvals',
+    columns: ['date', 'requestType', 'requester', 'description', 'status', 'approver', 'notes'],
+    headers: ['التاريخ', 'نوع الطلب', 'مقدم الطلب', 'الوصف', 'الحالة', 'الموافق', 'ملاحظات'],
+    sample: ['2024-01-05', 'إجازة', 'أحمد محمد', 'طلب إجازة سنوية', 'موافق', 'المدير', ''],
+    transform: (row) => ({
+      date:        toISO(row[0]) || '',
+      requestType: ss(row[1]),
+      requester:   ss(row[2]),
+      description: ss(row[3]),
+      status:      ss(row[4]) || 'قيد المراجعة',
+      approver:    ss(row[5]),
+      notes:       ss(row[6])
+    }),
+    validate: (r) => !!r.requester && !!r.requestType
+  },
+  invoices: {
+    label: 'الفواتير',
+    icon: '🧾',
+    collection: 'invoices',
+    columns: ['invoiceNum', 'date', 'client', 'description', 'total', 'status', 'notes'],
+    headers: ['رقم الفاتورة', 'التاريخ', 'العميل/الجهة', 'الوصف', 'الإجمالي', 'الحالة', 'ملاحظات'],
+    sample: ['INV-001', '2024-01-15', 'شركة النقل', 'خدمات نقل', '5000', 'مدفوعة', ''],
+    transform: (row) => ({
+      invoiceNum: ss(row[0]),
+      date:       toISO(row[1]) || '',
+      client:     ss(row[2]),
+      description:ss(row[3]),
+      total:      Number(row[4]) || 0,
+      status:     ss(row[5]) || 'معلقة',
+      notes:      ss(row[6]),
+      items:      []
+    }),
+    validate: (r) => !!r.client && r.total > 0
+  }
+};
 
-<!-- DASHBOARD -->
-<section class="section active" id="dash">
-  <div class="pg-head">
-    <div><div class="pg-title">لوحة <em>التحكم</em></div><div class="pg-sub">نظرة عامة على النظام</div></div>
-    <button class="btn btn-outline btn-sm" onclick="loadAll()">🔄 تحديث</button>
-  </div>
-  <div class="stats-row">
-    <div class="stat red"><div class="stat-label">عدد المخالفات</div><div class="stat-val" id="s-vc">—</div></div>
-    <div class="stat red"><div class="stat-label">مبلغ المخالفات</div><div class="stat-val" id="s-va">—</div></div>
-    <div class="stat green"><div class="stat-label">إجمالي الخصومات</div><div class="stat-val" id="s-da">—</div></div>
-    <div class="stat gold"><div class="stat-label">المتبقي</div><div class="stat-val" id="s-rem">—</div></div>
-    <div class="stat blue"><div class="stat-label">عدد السائقين</div><div class="stat-val" id="s-dr">—</div></div>
-    <div class="stat blue"><div class="stat-label">عدد السيارات</div><div class="stat-val" id="s-cars">—</div></div>
-    <div class="stat teal"><div class="stat-label">تراخيص ساري</div><div class="stat-val" id="s-lic-ok">—</div></div>
-    <div class="stat gold"><div class="stat-label">تنتهي قريباً</div><div class="stat-val" id="s-lic-soon">—</div></div>
-    <div class="stat red"><div class="stat-label">تراخيص منتهية</div><div class="stat-val" id="s-lic-exp">—</div></div>
-  </div>
-  <div class="pg-head" style="margin-top:1rem">
-    <div class="pg-title" style="font-size:1rem">آخر <em>المخالفات</em></div>
-    <button class="btn btn-outline btn-sm" onclick="show('vlog')">عرض الكل ←</button>
-  </div>
-  <div class="tbl-wrap" style="margin-bottom:1.5rem"><table>
-    <thead><tr><th>التاريخ</th><th>السائق</th><th>رقم السيارة</th><th>الوصف</th><th>المبلغ</th></tr></thead>
-    <tbody id="dash-vtbl"><tr><td colspan="5" class="tbl-loading"><span class="spinner"></span>جاري التحميل...</td></tr></tbody>
-  </table></div>
-  <div class="pg-head">
-    <div class="pg-title" style="font-size:1rem">تراخيص <em class="teal">تحتاج انتباه</em></div>
-    <button class="btn btn-outline btn-sm" onclick="show('licenses')">عرض الكل ←</button>
-  </div>
-  <div class="tbl-wrap"><table>
-    <thead><tr><th>رقم السيارة</th><th>الشركة</th><th>الشاسيه</th><th>انتهاء الترخيص</th><th>الحالة</th></tr></thead>
-    <tbody id="dash-lic-tbl"><tr><td colspan="5" class="tbl-loading"><span class="spinner"></span>جاري التحميل...</td></tr></tbody>
-  </table></div>
-</section>
+// الحالة الداخلية للاستيراد
+const IMP = {
+  current: 'drivers',
+  parsed:  {},
+  stats:   {}
+};
 
-<!-- DRIVERS -->
-<section class="section" id="drivers">
-  <div class="pg-head">
-    <div><div class="pg-title">بيانات <em>السائقين</em></div><div class="pg-sub">إدارة قائمة السائقين والسيارات</div></div>
-    <button class="btn btn-blue" onclick="openAddDriver()">＋ إضافة سائق</button>
-  </div>
-  <div class="toolbar">
-    <div class="search-wrap">
-      <span class="search-icon">🔍</span>
-      <input type="text" id="dr-q" placeholder="ابحث باسم السائق أو رقم السيارة..." autocomplete="off">
-      <button class="search-clear" id="dr-q-clear" onclick="clearSearch('dr')">×</button>
-      <div class="ac-dropdown" id="dr-q-ac"></div>
-    </div>
-  </div>
-  <div class="tbl-wrap"><table>
-    <thead><tr><th>#</th><th>اسم السائق</th><th>رقم السيارة</th><th>الإجراءات</th></tr></thead>
-    <tbody id="dr-tbl"><tr><td colspan="4" class="tbl-loading"><span class="spinner"></span>جاري التحميل...</td></tr></tbody>
-  </table>
-  <div id="dr-empty" class="empty-state" style="display:none"><div class="empty-icon">👤</div><div class="empty-txt">لا يوجد سائقون</div></div>
-  </div>
-</section>
+// ── تهيئة القسم ──────────────────────────────────────────
 
-<!-- ADD VIOLATION -->
-<section class="section" id="add-v">
-  <div class="pg-head"><div><div class="pg-title">إدخال <em>مخالفة</em></div><div class="pg-sub">إدخال يدوي أو استيراد من Excel</div></div></div>
-  <div class="import-panel">
-    <div class="import-header">
-      <span>📥 استيراد مخالفات من Excel</span>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <span style="font-size:.72rem;color:var(--muted)">الأعمدة: التاريخ | رقم السيارة | اسم السائق | الوصف | المبلغ</span>
-        <button class="btn btn-outline btn-sm" onclick="downloadImportTemplate()">⬇ تحميل قالب</button>
+function initImportSection() {
+  const tabBar = document.getElementById('imp-tab-bar');
+  const panels = document.getElementById('imp-panels');
+  if (!tabBar || !panels) return;
+
+  tabBar.innerHTML = '';
+  panels.innerHTML = '';
+
+  Object.entries(SHEET_MAPS).forEach(([key, cfg]) => {
+    // تاب
+    const tab = document.createElement('button');
+    tab.className = 'imp-tab' + (key === IMP.current ? ' active' : '');
+    tab.textContent = cfg.icon + ' ' + cfg.label;
+    tab.onclick = () => switchImportTab(key);
+    tabBar.appendChild(tab);
+
+    // بانيل
+    const panel = document.createElement('div');
+    panel.id = 'imp-panel-' + key;
+    panel.className = 'import-panel';
+    panel.style.display = key === IMP.current ? '' : 'none';
+    panel.innerHTML = buildImportPanel(key, cfg);
+    panels.appendChild(panel);
+  });
+
+  // إضافة event listeners لمناطق السحب والإفلات
+  Object.keys(SHEET_MAPS).forEach(setupDropZone);
+}
+
+function switchImportTab(key) {
+  IMP.current = key;
+  document.querySelectorAll('.imp-tab').forEach((t, i) => {
+    t.classList.toggle('active', Object.keys(SHEET_MAPS)[i] === key);
+  });
+  Object.keys(SHEET_MAPS).forEach(k => {
+    const p = document.getElementById('imp-panel-' + k);
+    if (p) p.style.display = k === key ? '' : 'none';
+  });
+}
+
+function buildImportPanel(key, cfg) {
+  return `
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:1rem">
+      <div>
+        <div style="font-weight:700;font-size:.9rem">${cfg.icon} استيراد ${cfg.label}</div>
+        <div style="font-size:.75rem;color:var(--muted);margin-top:2px">
+          ارفع ملف Excel المُصدَّر من Google Sheets — الأعمدة المطلوبة: <strong>${cfg.headers.join(' | ')}</strong>
+        </div>
       </div>
+      <button class="btn btn-outline btn-sm" onclick="downloadSample('${key}')">⬇ تحميل نموذج CSV</button>
     </div>
-    <div class="drop-zone" id="drop-zone" onclick="document.getElementById('import-file2').click()">
-      <input type="file" id="import-file2" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleImportFile(this)">
+
+    <div class="drop-zone" id="dz-${key}" onclick="document.getElementById('fi-${key}').click()">
+      <input type="file" id="fi-${key}" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleImportFile('${key}',this)">
       <div class="drop-zone-icon">📂</div>
-      <div class="drop-zone-txt">اضغط لاختيار ملف أو اسحبه هنا<br><strong>xlsx / xls / csv</strong></div>
+      <div class="drop-zone-txt">اسحب ملف Excel / CSV هنا أو <strong>اضغط للاختيار</strong></div>
     </div>
-    <div class="import-preview-wrap" id="import-preview-wrap">
-      <div class="import-preview-head">
-        <div class="istats">
-          <span class="is is-ok" id="imp-ok">✅ 0 جاهز</span>
-          <span class="is is-dup" id="imp-dup">⚠️ 0 مكرر</span>
-          <span class="is is-err" id="imp-err">❌ 0 خطأ</span>
-        </div>
-        <div style="display:flex;gap:8px">
-          <button class="btn btn-outline btn-sm" onclick="clearImportPreview()">✕ إلغاء</button>
-          <button class="btn btn-red btn-sm" id="btn-do-import" onclick="doImport()">💾 استيراد</button>
-        </div>
-      </div>
-      <div class="tbl-wrap" style="max-height:250px;overflow-y:auto">
-        <table style="font-size:.78rem"><thead><tr><th>#</th><th>التاريخ</th><th>السائق</th><th>السيارة</th><th>الوصف</th><th>المبلغ</th><th>الحالة</th></tr></thead>
-        <tbody id="import-preview-body"></tbody></table>
+
+    <div class="import-preview" id="prev-${key}">
+      <div class="prev-title" id="prev-title-${key}"></div>
+      <div style="overflow-x:auto;max-height:260px;overflow-y:auto" id="prev-tbl-wrap-${key}"></div>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn btn-green" id="imp-btn-${key}" onclick="uploadToFirebase('${key}')">
+          🔥 رفع إلى Firebase
+        </button>
+        <button class="btn btn-outline btn-sm" onclick="clearImport('${key}')">🗑 إلغاء</button>
       </div>
     </div>
-  </div>
-  <div class="form-card">
-    <div class="form-card-head">🚨 إدخال يدوي</div>
-    <div class="form-body">
-      <div class="form-grid">
-        <div class="fg"><label>التاريخ</label><input type="date" id="fv-date"></div>
-        <div class="fg">
-          <label>🔍 ابحث باسم السائق أو رقم السيارة</label>
-          <div class="field-ac-wrap">
-            <span class="field-ac-icon">🔍</span>
-            <input type="text" id="fv-search" placeholder="اكتب اسم السائق أو رقم السيارة..." autocomplete="off">
-            <button class="field-ac-clear" id="fv-search-clear" onclick="clearVSearch()">×</button>
-            <div class="field-ac-drop" id="fv-search-drop"></div>
-          </div>
-          <input type="hidden" id="fv-driver"><input type="hidden" id="fv-car">
-          <div id="fv-selected-badge" style="display:none"><div class="selected-badge">✅ <span id="fv-badge-txt"></span></div></div>
-        </div>
-        <div class="fg"><label>رقم السيارة (تلقائي)</label><input type="text" id="fv-car-display" placeholder="يُملأ بعد الاختيار" readonly style="background:var(--cream);color:var(--muted);cursor:not-allowed"></div>
-      </div>
-      <div style="margin-top:1.1rem">
-        <label style="font-size:.73rem;font-weight:700;color:var(--muted);text-transform:uppercase">تفاصيل المخالفات (حتى 5 بنود)</label>
-        <table class="multi-table" style="margin-top:.5rem">
-          <thead><tr><th style="width:60%">الوصف</th><th>المبلغ (جنيه)</th></tr></thead>
-          <tbody id="fv-rows"></tbody>
-        </table>
-      </div>
+
+    <div class="import-progress" id="prog-${key}">
+      <div class="progress-txt" id="prog-txt-${key}">جاري الرفع...</div>
+      <div class="progress-bar-wrap"><div class="progress-bar" id="prog-bar-${key}"></div></div>
     </div>
-    <div class="form-footer">
-      <button class="btn btn-outline" onclick="clearVForm()">🗑 مسح</button>
-      <button class="btn btn-red" id="fv-submit" onclick="submitViolation()">💾 حفظ المخالفة</button>
-    </div>
-  </div>
-</section>
 
-<!-- ADD DEDUCTION -->
-<section class="section" id="add-d">
-  <div class="pg-head">
-    <div><div class="pg-title">إدخال <em>خصم</em></div><div class="pg-sub">السائقون لديهم مبالغ مستحقة</div></div>
-    <button class="btn btn-green" onclick="openBulkDeduction()">💰 خصم جماعي</button>
-  </div>
-  <div class="toolbar">
-    <div class="search-wrap">
-      <span class="search-icon">🔍</span>
-      <input type="text" id="ded-search" placeholder="ابحث باسم السائق..." autocomplete="off">
-      <button class="search-clear" id="ded-search-clear" onclick="clearSearch('ded')">×</button>
-      <div class="ac-dropdown" id="ded-search-ac"></div>
-    </div>
-    <button class="btn btn-outline btn-sm" onclick="loadAll()">🔄 تحديث</button>
-  </div>
-  <div style="margin-bottom:1rem;padding:10px 16px;background:#fff;border:1.5px solid var(--border);border-radius:10px;display:flex;gap:20px;flex-wrap:wrap;align-items:center">
-    <span style="font-size:.75rem;color:var(--muted);font-weight:700">إجمالي المستحق:</span>
-    <span id="ded-total-bal" style="font-family:'Readex Pro';font-weight:700;color:var(--gold)">—</span>
-    <span style="font-size:.75rem;color:var(--muted);font-weight:700;margin-right:auto">عدد السائقين بأرصدة:</span>
-    <span id="ded-count-bal" style="font-family:'Readex Pro';font-weight:700;color:var(--b)">—</span>
-  </div>
-  <div class="ded-drivers-grid" id="ded-cards"></div>
-  <div id="ded-empty" class="empty-state" style="display:none"><div class="empty-icon">💸</div><div class="empty-txt">لا يوجد سائقون لديهم مبالغ مستحقة</div></div>
-</section>
-
-<!-- VIOLATIONS LOG -->
-<section class="section" id="vlog">
-  <div class="pg-head">
-    <div><div class="pg-title">سجل <em>المخالفات</em></div></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-outline btn-sm" onclick="exportToExcel('v')">⬇ Excel</button>
-      <button class="btn btn-red" onclick="show('add-v')">＋ مخالفة جديدة</button>
-    </div>
-  </div>
-  <div class="toolbar">
-    <div class="search-wrap"><span class="search-icon">🔍</span><input type="text" id="vs-q" placeholder="ابحث عن سائق أو مخالفة أو سيارة..." autocomplete="off"><button class="search-clear" id="vs-q-clear" onclick="clearSearch('vlog')">×</button><div class="ac-dropdown" id="vs-q-ac"></div></div>
-    <select class="flt" id="vs-driver" onchange="PG.vlog=1;renderVLog()"><option value="">كل السائقين</option></select>
-  </div>
-  <div class="tbl-wrap"><table>
-    <thead><tr><th>#</th><th>التاريخ</th><th>السائق</th><th>رقم السيارة</th><th>الوصف</th><th>المبلغ</th><th>الإجراءات</th></tr></thead>
-    <tbody id="vlog-tbl"></tbody></table>
-    <div id="vlog-empty" class="empty-state" style="display:none"><div class="empty-icon">🚨</div><div class="empty-txt">لا توجد مخالفات</div></div>
-    <div class="pager" id="vlog-pager"></div>
-  </div>
-</section>
-
-<!-- DEDUCTIONS LOG -->
-<section class="section" id="dlog">
-  <div class="pg-head">
-    <div><div class="pg-title">سجل <em>الخصومات</em></div></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-outline btn-sm" onclick="exportToExcel('d')">⬇ Excel</button>
-      <button class="btn btn-green" onclick="show('add-d')">＋ خصم جديد</button>
-    </div>
-  </div>
-  <!-- Monthly Report -->
-  <div class="monthly-card">
-    <label style="font-size:.8rem;font-weight:700;color:var(--muted)">📅 الشهر:</label>
-    <select id="rpt-month"><option value="1">يناير</option><option value="2">فبراير</option><option value="3">مارس</option><option value="4">أبريل</option><option value="5">مايو</option><option value="6">يونيو</option><option value="7">يوليو</option><option value="8">أغسطس</option><option value="9">سبتمبر</option><option value="10">أكتوبر</option><option value="11">نوفمبر</option><option value="12">ديسمبر</option></select>
-    <input type="number" id="rpt-year" value="2026" style="width:80px">
-    <select id="rpt-driver"><option value="">كل السائقين</option></select>
-    <button class="btn btn-blue btn-sm" onclick="generateMonthlyReport()">📊 عرض</button>
-    <button class="btn btn-green btn-sm" onclick="printMonthlyReport()">🖨️ طباعة</button>
-  </div>
-  <div id="monthly-rpt-box" style="display:none;margin-bottom:1rem">
-    <div class="report-stats-grid" id="rpt-stats"></div>
-    <div class="tbl-wrap"><table><thead><tr><th>#</th><th>التاريخ</th><th>السائق</th><th>السيارة</th><th>الوصف/النوع</th><th>المبلغ</th></tr></thead><tbody id="rpt-body"></tbody></table></div>
-  </div>
-  <div class="toolbar" style="margin-top:.5rem">
-    <div class="search-wrap"><span class="search-icon">🔍</span><input type="text" id="ds-q" placeholder="ابحث عن سائق أو نوع الخصم..." autocomplete="off"><button class="search-clear" id="ds-q-clear" onclick="clearSearch('dlog')">×</button><div class="ac-dropdown" id="ds-q-ac"></div></div>
-    <select class="flt" id="ds-driver" onchange="PG.dlog=1;renderDLog()"><option value="">كل السائقين</option></select>
-  </div>
-  <div class="tbl-wrap"><table>
-    <thead><tr><th>#</th><th>التاريخ</th><th>السائق</th><th>المبلغ</th><th>النوع</th><th>الإجراءات</th></tr></thead>
-    <tbody id="dlog-tbl"></tbody></table>
-    <div id="dlog-empty" class="empty-state" style="display:none"><div class="empty-icon">💸</div><div class="empty-txt">لا توجد خصومات</div></div>
-    <div class="pager" id="dlog-pager"></div>
-  </div>
-</section>
-
-<!-- ACCOUNTS -->
-<section class="section" id="acc">
-  <div class="pg-head">
-    <div><div class="pg-title">شيت <em>الحسابات</em></div></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-outline btn-sm" onclick="exportToExcel('a')">⬇ Excel</button>
-      <button class="btn btn-green" onclick="openBulkDeduction()">💰 خصم جماعي</button>
-    </div>
-  </div>
-  <div class="toolbar">
-    <div class="search-wrap"><span class="search-icon">🔍</span><input type="text" id="as-q" placeholder="ابحث باسم السائق..." autocomplete="off"><button class="search-clear" id="as-q-clear" onclick="clearSearch('acc')">×</button><div class="ac-dropdown" id="as-q-ac"></div></div>
-    <button class="btn btn-outline btn-sm" onclick="loadAll()">🔄 تحديث</button>
-  </div>
-  <div class="tbl-wrap"><table>
-    <thead><tr><th>#</th><th>اسم السائق</th><th>إجمالي المخالفات</th><th>إجمالي الخصومات</th><th>المتبقي</th></tr></thead>
-    <tbody id="acc-tbl"></tbody></table>
-    <div id="acc-empty" class="empty-state" style="display:none"><div class="empty-icon">💰</div><div class="empty-txt">لا توجد بيانات</div></div>
-  </div>
-</section>
-
-<!-- REPORTS -->
-<section class="section" id="reports">
-  <div class="pg-head">
-    <div><div class="pg-title">📊 <em>التقارير</em></div></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-outline btn-sm" onclick="loadAll()">🔄 تحديث</button>
-      <button class="btn btn-gold" onclick="exportToExcel('all')">⬇ تصدير Excel كامل</button>
-    </div>
-  </div>
-  <div class="toolbar">
-    <div class="search-wrap"><span class="search-icon">🔍</span><input type="text" id="rp-q" placeholder="ابحث..." autocomplete="off"><button class="search-clear" id="rp-q-clear" onclick="clearSearch('rp')">×</button><div class="ac-dropdown" id="rp-q-ac"></div></div>
-    <select class="flt" id="rp-driver" onchange="PG.rp=1;renderReport()"><option value="">كل السائقين</option></select>
-    <select class="flt" id="rp-type" onchange="PG.rp=1;renderReport()"><option value="">كل الأنواع</option><option value="مخالفة">مخالفة</option><option value="خصم">خصم</option></select>
-  </div>
-  <div class="tbl-wrap"><table>
-    <thead><tr><th>#</th><th>التاريخ</th><th>السائق</th><th>رقم السيارة</th><th>الوصف</th><th>المبلغ</th><th>النوع</th></tr></thead>
-    <tbody id="rp-tbl"></tbody></table>
-    <div id="rp-empty" class="empty-state" style="display:none"><div class="empty-icon">📊</div><div class="empty-txt">لا توجد بيانات</div></div>
-    <div class="pager" id="rp-pager"></div>
-  </div>
-</section>
-
-<!-- ============================================================ -->
-<!-- 🪪 قسم التراخيص - جديد -->
-<!-- ============================================================ -->
-<section class="section" id="licenses">
-  <div class="pg-head">
-    <div><div class="pg-title">إدارة <em class="teal">التراخيص</em></div><div class="pg-sub">متابعة تواريخ انتهاء تراخيص السيارات</div></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-outline btn-sm" onclick="loadAll()">🔄 تحديث</button>
-      <button class="btn btn-teal" onclick="exportLicensesExcel()">⬇ تصدير Excel</button>
-    </div>
-  </div>
-  <div class="stats-row" style="margin-bottom:1rem">
-    <div class="stat teal"><div class="stat-label">تراخيص سارية</div><div class="stat-val" id="ls-ok">—</div></div>
-    <div class="stat gold"><div class="stat-label">تنتهي خلال 30 يوم</div><div class="stat-val" id="ls-soon">—</div></div>
-    <div class="stat red"><div class="stat-label">تراخيص منتهية</div><div class="stat-val" id="ls-exp">—</div></div>
-    <div class="stat blue"><div class="stat-label">إجمالي السيارات</div><div class="stat-val" id="ls-total">—</div></div>
-  </div>
-  <div class="lic-filter-tabs">
-    <button class="lic-tab active" onclick="setLicFilter('all',this)">📋 الكل</button>
-    <button class="lic-tab" onclick="setLicFilter('ساري',this)" style="--tab-c:var(--teal)">✅ سارية</button>
-    <button class="lic-tab gold" onclick="setLicFilter('ينتهي قريباً',this)">⚠️ تنتهي قريباً</button>
-    <button class="lic-tab red" onclick="setLicFilter('منتهي',this)">❌ منتهية</button>
-  </div>
-  <div class="toolbar">
-    <div class="search-wrap">
-      <span class="search-icon">🔍</span>
-      <input type="text" id="lic-q" placeholder="ابحث برقم السيارة أو الشركة أو السائق..." autocomplete="off" oninput="renderLicenses()">
-      <button class="search-clear" id="lic-q-clear" onclick="document.getElementById('lic-q').value='';document.getElementById('lic-q-clear').classList.remove('visible');renderLicenses()">×</button>
-    </div>
-  </div>
-  <div class="lic-grid" id="lic-cards"></div>
-  <div id="lic-empty" class="empty-state" style="display:none"><div class="empty-icon">🪪</div><div class="empty-txt">لا توجد بيانات تراخيص<br><small style="font-size:.75rem;margin-top:4px;display:block">تأكد من وجود شيت "البيانات" في الملف</small></div></div>
-</section>
-
-</div></div>
-
-<!-- MODALS -->
-<div class="backdrop" id="m-driver"><div class="modal"><div class="modal-head"><span class="modal-title" id="m-driver-title">➕ إضافة سائق</span><button class="modal-x" onclick="closeModal('m-driver')">×</button></div><div class="modal-body"><div class="form-grid"><div class="fg"><label>اسم السائق</label><input type="text" id="md-name" placeholder="الاسم الكامل"></div><div class="fg"><label>رقم السيارة</label><input type="text" id="md-car" placeholder="رقم اللوحة"></div></div></div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('m-driver')">إلغاء</button><button class="btn btn-blue" id="md-save" onclick="saveDriver()">💾 حفظ</button></div></div></div>
-
-<div class="backdrop" id="m-ev"><div class="modal"><div class="modal-head"><span class="modal-title">✏ تعديل مخالفة</span><button class="modal-x" onclick="closeModal('m-ev')">×</button></div><div class="modal-body"><div class="form-grid"><div class="fg"><label>التاريخ</label><input type="date" id="ev-date"></div><div class="fg"><label>السائق</label><input type="text" id="ev-driver" list="dl-list"></div><div class="fg"><label>رقم السيارة</label><input type="text" id="ev-car"></div><div class="fg"><label>المبلغ</label><input type="number" id="ev-amount" min="0" step="0.01"></div><div class="fg span2"><label>الوصف</label><input type="text" id="ev-desc"></div></div></div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('m-ev')">إلغاء</button><button class="btn btn-red" id="ev-save" onclick="updateViolation()">💾 تحديث</button></div></div></div>
-
-<div class="backdrop" id="m-ed"><div class="modal"><div class="modal-head"><span class="modal-title">✏ تعديل خصم</span><button class="modal-x" onclick="closeModal('m-ed')">×</button></div><div class="modal-body"><div class="form-grid"><div class="fg"><label>التاريخ</label><input type="date" id="ed-date"></div><div class="fg"><label>السائق</label><input type="text" id="ed-driver" list="dl-list"></div><div class="fg"><label>المبلغ</label><input type="number" id="ed-amount" min="0" step="0.01"></div><div class="fg"><label>النوع</label><input type="text" id="ed-type"></div></div></div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('m-ed')">إلغاء</button><button class="btn btn-green" id="ed-save" onclick="updateDeduction()">💾 تحديث</button></div></div></div>
-
-<div class="backdrop" id="m-confirm"><div class="modal" style="max-width:320px"><div class="modal-head"><span class="modal-title">تأكيد الحذف</span><button class="modal-x" onclick="closeModal('m-confirm')">×</button></div><div class="modal-body"><div class="confirm-wrap"><div class="confirm-icon">⚠️</div><div class="confirm-ttl">هل أنت متأكد؟</div><div class="confirm-msg">سيتم حذف هذا السجل نهائياً.</div></div></div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('m-confirm')">إلغاء</button><button class="btn btn-red" id="confirm-del-btn">🗑 تأكيد الحذف</button></div></div></div>
-
-<div class="backdrop" id="m-dup"><div class="modal" style="max-width:500px"><div class="modal-head" style="background:#b8860b"><span class="modal-title">⚠️ مخالفة مكررة</span><button class="modal-x" onclick="closeModal('m-dup')">×</button></div><div class="modal-body"><p style="font-size:.85rem;margin-bottom:8px">تم العثور على مخالفات سابقة بنفس <strong>السائق والتاريخ</strong>:</p><ul class="dup-list" id="dup-list-items"></ul><p style="font-size:.8rem;color:var(--muted);margin-top:10px">هل تريد الاستمرار في الحفظ رغم التكرار؟</p></div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('m-dup')">❌ إلغاء</button><button class="btn btn-red" onclick="proceedSaveViolation()">✅ موافق — استمرار الحفظ</button></div></div></div>
-
-<div class="backdrop" id="m-bulk"><div class="modal" style="max-width:750px;max-height:92vh;display:flex;flex-direction:column"><div class="modal-head"><span class="modal-title">💰 خصم جماعي</span><button class="modal-x" onclick="closeModal('m-bulk')">×</button></div><div class="modal-body" style="overflow-y:auto;flex:1"><div class="form-grid" style="margin-bottom:1rem"><div class="fg"><label>المبلغ (جنيه)</label><input type="number" id="bulk-amount" value="1000" min="1" step="1" oninput="debouncedBulkPreview()" style="font-size:1.1rem;padding:10px;font-weight:700"></div><div class="fg"><label>نوع الخصم</label><input type="text" id="bulk-type" value="خصم جماعي"></div><div class="fg"><label>التاريخ</label><input type="date" id="bulk-date"></div><div class="fg"><label>ملاحظات</label><input type="text" id="bulk-notes" placeholder="اختياري"></div></div><div class="bulk-summary-box"><div class="bulk-sum-item"><div class="lbl">عدد السائقين</div><div class="val" id="bsum-count">—</div></div><div class="bulk-sum-item"><div class="lbl">إجمالي المخصوم</div><div class="val" style="color:var(--accent)" id="bsum-total">—</div></div><div class="bulk-sum-item"><div class="lbl">المتبقي بعد</div><div class="val" style="color:var(--g)" id="bsum-after">—</div></div></div><div class="tbl-wrap" style="max-height:300px;overflow-y:auto"><table style="font-size:.81rem"><thead><tr><th>#</th><th>السائق</th><th>المتبقي</th><th>المطلوب</th><th>المخصوم فعلاً</th><th>بعد الخصم</th><th>الحالة</th></tr></thead><tbody id="bulk-preview"></tbody></table></div></div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('m-bulk')">إلغاء</button><button class="btn btn-green" id="bulk-submit" onclick="executeBulkDeduction()">💾 تنفيذ وطباعة PDF</button></div></div></div>
-
-<!-- 🪪 مودال تجديد الترخيص -->
-<div class="backdrop" id="m-license"><div class="modal"><div class="modal-head" style="background:var(--teal)"><span class="modal-title">🪪 تجديد ترخيص السيارة</span><button class="modal-x" onclick="closeModal('m-license')">×</button></div><div class="modal-body"><div id="lic-modal-info" style="background:var(--cream);border-radius:8px;padding:12px 16px;margin-bottom:1rem;font-size:.85rem"></div><div class="form-grid"><div class="fg span2"><label>تاريخ الانتهاء الجديد</label><input type="date" id="lic-new-date"></div></div></div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('m-license')">إلغاء</button><button class="btn btn-teal" id="lic-save-btn" onclick="saveLicenseRenewal()">💾 حفظ التجديد</button></div></div></div>
-
-<datalist id="dl-list"></datalist>
-<div id="toast"></div>
-<script>
-/* ============================================================
-   HELPERS
-============================================================ */
-function ss(v){return v===null||v===undefined?'':String(v);}
-function toISO(d){if(!d)return'';try{if(d instanceof Date)return d.toISOString().slice(0,10);const s=String(d).trim();if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;if(/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$/.test(s)){const[a,b,c]=s.split(/[\/\-]/);return`${c}-${b.padStart(2,'0')}-${a.padStart(2,'0')}`;}return s;}catch{return String(d);}}
-function toDay(){const n=new Date();return`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`;}
-function fmtD(d){if(!d)return'—';try{const[y,m,day]=String(d).slice(0,10).split('-');return new Date(+y,+m-1,+day).toLocaleDateString('ar-EG',{year:'numeric',month:'short',day:'numeric'});}catch{return d;}}
-function fmtDL(d){if(!d)return'—';try{const[y,m,day]=String(d).slice(0,10).split('-');return new Date(+y,+m-1,+day).toLocaleDateString('ar-EG',{year:'numeric',month:'long',day:'numeric'});}catch{return d;}}
-function fmt(n){return Number(n).toLocaleString('ar-EG',{maximumFractionDigits:0});}
-function hl(text,q){if(!q||!text)return text||'';const i=text.toLowerCase().indexOf(q.toLowerCase());if(i<0)return text;return text.slice(0,i)+`<mark style="background:rgba(192,57,43,.2);color:var(--accent);border-radius:2px;padding:0 2px">${text.slice(i,i+q.length)}</mark>`+text.slice(i+q.length);}
-
-/* ============================================================
-   DATA / API
-============================================================ */
-let DATA={drivers:[],violations:[],deductions:[],accounts:[],licenses:[]};
-const PS=10,PG={vlog:1,dlog:1,rp:1};
-const FILTERS={vlog:'',dlog:'',acc:'',rp:'',dr:'',ded:''};
-let pendingVRows=[],importData=[];
-let currentMonthlyReport=null;
-let LIC_FILTER='all';
-let currentLicCar=null;
-
-/* ============================================================
-   GAS BRIDGE — يعمل داخل Google Apps Script أو وضع تجريبي
-============================================================ */
-var GAS_MODE = (typeof google !== 'undefined' && google.script && google.script.run);
-// إظهار تحذير إذا لم يكن داخل GAS
-if(!GAS_MODE){
-  var wb = document.getElementById('gas-warning');
-  if(wb) wb.style.display = 'block';
+    <div class="import-result" id="imp-result-${key}"></div>
+  `;
 }
 
-function gasCall(fn){
-  var args = Array.prototype.slice.call(arguments, 1);
-  return new Promise(function(res, rej){
-    if(!GAS_MODE){
-      rej(new Error('لا يوجد اتصال بـ Google Apps Script — تأكد أن الملف مفتوح من داخل Spreadsheet'));
-      return;
+function setupDropZone(key) {
+  const dz = document.getElementById('dz-' + key);
+  if (!dz) return;
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault();
+    dz.classList.remove('over');
+    const file = e.dataTransfer.files[0];
+    if (file) processImportFile(key, file);
+  });
+}
+
+// ── معالجة الملف ─────────────────────────────────────────
+
+function handleImportFile(key, input) {
+  const file = input.files[0];
+  if (!file) return;
+  processImportFile(key, file);
+  input.value = '';
+}
+
+function processImportFile(key, file) {
+  const reader = new FileReader();
+  const isCSV  = file.name.toLowerCase().endsWith('.csv');
+
+  reader.onload = e => {
+    try {
+      let rows;
+      if (isCSV) {
+        rows = parseCSV(e.target.result);
+      } else {
+        const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, dateNF: 'yyyy-mm-dd' });
+      }
+
+      // تخطي الهيدر (أول صف)
+      const dataRows = rows.slice(1).filter(r => r.some(c => c !== '' && c !== null && c !== undefined));
+      if (!dataRows.length) { showImportResult(key, false, 'لم يتم العثور على بيانات في الملف'); return; }
+
+      const cfg = SHEET_MAPS[key];
+      const transformed = dataRows.map(r => cfg.transform(r));
+      const valid   = transformed.filter(r => cfg.validate(r));
+      const invalid = transformed.length - valid.length;
+
+      IMP.parsed[key] = valid;
+      IMP.stats[key]  = { total: transformed.length, valid: valid.length, invalid };
+
+      showImportPreview(key, valid, invalid);
+    } catch (err) {
+      showImportResult(key, false, 'خطأ في قراءة الملف: ' + err.message);
     }
-    var runner = google.script.run.withSuccessHandler(res).withFailureHandler(function(e){
-      rej(new Error(e.message || String(e)));
+  };
+
+  if (isCSV) reader.readAsText(file, 'UTF-8');
+  else       reader.readAsArrayBuffer(file);
+}
+
+function parseCSV(text) {
+  return text.split('\n').map(line =>
+    line.split(',').map(cell => cell.trim().replace(/^"|"$/g, ''))
+  ).filter(r => r.length > 1);
+}
+
+// ── عرض المعاينة ──────────────────────────────────────────
+
+function showImportPreview(key, valid, invalidCount) {
+  const cfg   = SHEET_MAPS[key];
+  const prev  = document.getElementById('prev-' + key);
+  const title = document.getElementById('prev-title-' + key);
+  const wrap  = document.getElementById('prev-tbl-wrap-' + key);
+  const btn   = document.getElementById('imp-btn-' + key);
+
+  if (!prev) return;
+  prev.style.display = '';
+
+  const previewRows = valid.slice(0, 8);
+  const colKeys = cfg.columns;
+
+  title.innerHTML =
+    `<span style="color:var(--g);font-weight:700">✅ ${valid.length} سجل صالح</span>` +
+    (invalidCount > 0 ? ` &nbsp; <span style="color:var(--accent)">⚠️ ${invalidCount} تم تجاهلها</span>` : '') +
+    ` &nbsp; <span style="color:var(--muted);font-size:.76rem">(معاينة أول ${previewRows.length})</span>`;
+
+  wrap.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:.78rem;min-width:400px">
+      <thead><tr>${cfg.headers.map(h => `<th style="background:var(--ink);color:#f5f0e8;padding:7px 10px;text-align:right;white-space:nowrap">${h}</th>`).join('')}</tr></thead>
+      <tbody>${previewRows.map(r =>
+        `<tr style="border-bottom:1px solid var(--cream)">${colKeys.map(c =>
+          `<td style="padding:6px 10px;background:#fff">${r[c] ?? '—'}</td>`
+        ).join('')}</tr>`
+      ).join('')}</tbody>
+    </table>
+  `;
+
+  if (btn) btn.textContent = `🔥 رفع ${valid.length} سجل إلى Firebase`;
+}
+
+// ── الرفع إلى Firebase ────────────────────────────────────
+
+async function uploadToFirebase(key) {
+  if (!FB_READY) { toast('⚠ اتصل بـ Firebase أولاً من الإعدادات', 'warn'); return; }
+  const rows = IMP.parsed[key];
+  if (!rows || !rows.length) { toast('⚠ لا توجد بيانات للرفع', 'warn'); return; }
+
+  const btn  = document.getElementById('imp-btn-' + key);
+  const prog = document.getElementById('prog-' + key);
+  const bar  = document.getElementById('prog-bar-' + key);
+  const txt  = document.getElementById('prog-txt-' + key);
+
+  if (btn)  btn.disabled = true;
+  if (prog) prog.style.display = '';
+  if (txt)  txt.textContent = `جاري رفع ${rows.length} سجل...`;
+
+  try {
+    await dbBatchImport(SHEET_MAPS[key].collection, rows, pct => {
+      if (bar) bar.style.width = pct + '%';
+      if (txt) txt.textContent = `جاري الرفع... ${pct}%`;
     });
-    runner[fn].apply(runner, args);
-  });
-}
 
-async function loadAll(){
-  setStatus('loading','جاري التحميل...');
-  if(!GAS_MODE){
-    setStatus('err','⚠️ يعمل خارج Google Apps Script');
-    document.getElementById('status-txt').innerHTML =
-      '⚠️ هذا الملف يجب فتحه من داخل <strong>Google Spreadsheet → Extensions → Apps Script</strong>';
-    renderAll();
-    return;
-  }
-  try{
-    const raw = await gasCall('serverGetAll');
-    const all = typeof raw==='string' ? JSON.parse(raw) : raw;
-    if(!all) throw new Error('لم تصل بيانات من السيرفر');
-    DATA.drivers    = all.drivers    || [];
-    DATA.violations = all.violations || [];
-    DATA.deductions = all.deductions || [];
-    DATA.accounts   = all.accounts   || [];
-    DATA.licenses   = all.licenses   || [];
-    setStatus('ok', '✅ متصل — ' + new Date().toLocaleTimeString('ar-EG'));
-    renderAll();
-    toast('✅ تم التحديث','ok');
-  }catch(e){
-    setStatus('err','❌ ' + e.message);
-    toast('❌ ' + e.message,'err');
-    console.error('loadAll error:', e);
-    // حاول Render بدون بيانات حتى تظهر الواجهة
-    renderAll();
-  }
-}
-
-async function apiPost(action, payload){
-  if(!GAS_MODE) throw new Error('لا يوجد اتصال بـ Google Apps Script');
-  const raw = await gasCall('serverPost', action, payload || {});
-  const res = typeof raw==='string' ? JSON.parse(raw) : raw;
-  if(res && res.status==='error') throw new Error(res.message || 'خطأ في السيرفر');
-  return true;
-}
-function setStatus(t,txt){document.getElementById('status-dot').className='status-dot '+t;document.getElementById('status-txt').textContent=txt;}
-
-/* ============================================================
-   RENDER ALL
-============================================================ */
-function renderAll(){
-  buildDriverSelects();buildDriversTable();renderDash();renderVLog();renderDLog();renderAcc();renderReport();renderDedCards();buildFvRows();setTodayDates();updateDatalist();updateRptDrivers();renderLicenses();renderLicStats();
-}
-function setTodayDates(){['fv-date','bulk-date'].forEach(id=>{const el=document.getElementById(id);if(el&&!el.value)el.value=toDay();});}
-function buildDriverSelects(){
-  const names=[...new Set([...DATA.violations.map(v=>v.driver),...DATA.deductions.map(d=>d.driver),...DATA.drivers.map(d=>d.name)])].sort();
-  const opts='<option value="">كل السائقين</option>'+names.map(n=>`<option value="${n}">${n}</option>`).join('');
-  ['vs-driver','ds-driver','rp-driver'].forEach(id=>{const el=document.getElementById(id);if(!el)return;const c=el.value;el.innerHTML=opts;if(c)el.value=c;});
-}
-function updateDatalist(){document.getElementById('dl-list').innerHTML=DATA.drivers.map(d=>`<option value="${d.name}">`).join('');}
-function updateRptDrivers(){
-  const el=document.getElementById('rpt-driver');if(!el)return;
-  const c=el.value;
-  const names=[...new Set([...DATA.deductions.map(d=>d.driver),...DATA.drivers.map(d=>d.name)])].sort();
-  el.innerHTML='<option value="">كل السائقين</option>'+names.map(n=>`<option value="${n}">${n}</option>`).join('');
-  if(c)el.value=c;
-}
-function buildFvRows(){
-  const t=document.getElementById('fv-rows');if(!t||t.children.length===5)return;t.innerHTML='';
-  for(let i=0;i<5;i++)t.insertAdjacentHTML('beforeend',`<tr><td><input type="text" id="fv-desc-${i}" placeholder="وصف المخالفة"></td><td><input type="number" id="fv-amt-${i}" placeholder="0" min="0" step="0.01"></td></tr>`);
-}
-
-/* ============================================================
-   DASHBOARD
-============================================================ */
-function renderDash(){
-  const vA=DATA.violations.reduce((s,v)=>s+Number(v.amount),0),dA=DATA.deductions.reduce((s,d)=>s+Number(d.amount),0);
-  const dr=new Set([...DATA.violations.map(v=>v.driver),...DATA.deductions.map(d=>d.driver),...DATA.drivers.map(d=>d.name)]);
-  const ca=new Set([...DATA.violations.map(v=>v.car),...DATA.drivers.map(d=>d.car)]);
-  ['s-vc','s-va','s-da','s-rem','s-dr','s-cars'].forEach((id,i)=>document.getElementById(id).textContent=[DATA.violations.length,fmt(vA),fmt(dA),fmt(vA-dA),dr.size,ca.size][i]);
-  const latest=[...DATA.violations].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,6);
-  document.getElementById('dash-vtbl').innerHTML=!latest.length?'<tr><td colspan="5" class="tbl-loading">لا توجد مخالفات</td></tr>':latest.map(v=>`<tr><td>${fmtD(v.date)}</td><td class="driver-cell">${v.driver}</td><td class="car-cell">${v.car||'—'}</td><td class="desc-cell">${v.desc}</td><td class="money-red">${fmt(v.amount)} ج</td></tr>`).join('');
-  // تراخيص تحتاج انتباه في الداشبورد
-  const urgentLics=DATA.licenses.filter(l=>l.status!=='ساري').sort((a,b)=>(a.diffDays||999)-(b.diffDays||999)).slice(0,6);
-  ['s-lic-ok','s-lic-soon','s-lic-exp'].forEach((id,i)=>document.getElementById(id).textContent=[DATA.licenses.filter(l=>l.status==='ساري').length,DATA.licenses.filter(l=>l.status==='ينتهي قريباً').length,DATA.licenses.filter(l=>l.status==='منتهي').length][i]);
-  document.getElementById('dash-lic-tbl').innerHTML=!urgentLics.length?'<tr><td colspan="5" class="tbl-loading" style="color:var(--g)">✅ كل التراخيص سارية</td></tr>':urgentLics.map(l=>`<tr><td class="car-cell">${l.carNumber}</td><td>${l.company||'—'}</td><td class="driver-cell">${l.driver||'—'}</td><td class="lic-expiry ${l.status==='منتهي'?'expired':l.status==='ينتهي قريباً'?'soon':'ok'}">${fmtD(l.expiry)}</td><td>${licStatusTag(l.status)}</td></tr>`).join('');
-}
-
-/* ============================================================
-   LICENSE SECTION
-============================================================ */
-function licStatusTag(s){if(s==='ساري')return'<span class="tag tag-ok">✅ ساري</span>';if(s==='ينتهي قريباً')return'<span class="tag tag-warn">⚠️ ينتهي قريباً</span>';if(s==='منتهي')return'<span class="tag tag-expired">❌ منتهي</span>';return`<span class="tag">${s}</span>`;}
-
-function renderLicStats(){
-  const ok=DATA.licenses.filter(l=>l.status==='ساري').length;
-  const soon=DATA.licenses.filter(l=>l.status==='ينتهي قريباً').length;
-  const exp=DATA.licenses.filter(l=>l.status==='منتهي').length;
-  ['ls-ok','ls-soon','ls-exp','ls-total'].forEach((id,i)=>{const el=document.getElementById(id);if(el)el.textContent=[ok,soon,exp,DATA.licenses.length][i];});
-}
-
-function setLicFilter(f,btn){
-  LIC_FILTER=f;
-  document.querySelectorAll('.lic-tab').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  renderLicenses();
-}
-
-function renderLicenses(){
-  const q=(document.getElementById('lic-q')?.value||'').toLowerCase().trim();
-  document.getElementById('lic-q-clear')?.classList.toggle('visible',q.length>0);
-  let lics=DATA.licenses;
-  if(LIC_FILTER!=='all')lics=lics.filter(l=>l.status===LIC_FILTER);
-  if(q)lics=lics.filter(l=>l.carNumber.toLowerCase().includes(q)||l.company.toLowerCase().includes(q)||l.driver.toLowerCase().includes(q)||l.chassis.toLowerCase().includes(q));
-  lics=lics.sort((a,b)=>(a.diffDays??9999)-(b.diffDays??9999));
-  const grid=document.getElementById('lic-cards'),empty=document.getElementById('lic-empty');
-  if(!lics.length){grid.innerHTML='';empty.style.display='';return;}
-  empty.style.display='none';
-  grid.innerHTML=lics.map(l=>{
-    const cls=l.status==='منتهي'?'expired':l.status==='ينتهي قريباً'?'soon':'';
-    const expCls=l.status==='منتهي'?'expired':l.status==='ينتهي قريباً'?'soon':'ok';
-    const daysText=l.diffDays===null?'':l.diffDays<0?`منذ ${Math.abs(l.diffDays)} يوم`:l.diffDays===0?'ينتهي اليوم!':`باقي ${l.diffDays} يوم`;
-    return`<div class="lic-card ${cls}"><div class="lic-card-head ${cls||'ok'}"><div><div class="lic-car-num">🚗 ${hl(l.carNumber,q)}</div>${l.carType?`<div style="font-size:.73rem;color:var(--muted);margin-top:2px">${l.carType}</div>`:''}</div>${licStatusTag(l.status)}</div><div class="lic-card-body">${l.company?`<div class="lic-row"><span class="lic-lbl">الشركة</span><span class="lic-val">${hl(l.company,q)}</span></div>`:''}<div class="lic-row"><span class="lic-lbl">الموتور</span><span class="lic-val">${hl(l.driver||'—',q)}</span></div>${l.chassis?`<div class="lic-row"><span class="lic-lbl">الشاسيه</span><span class="lic-val" style="font-family:monospace;font-size:.78rem">${l.chassis}</span></div>`:''}<div class="lic-row" style="margin-top:6px"><span class="lic-lbl">تاريخ الانتهاء</span><span class="lic-expiry ${expCls}">${fmtD(l.expiry)}</span></div>${daysText?`<div style="font-size:.74rem;font-weight:700;color:var(--muted);text-align:left;margin-top:2px">${daysText}</div>`:''}</div><div class="lic-card-foot"><button class="btn btn-teal btn-sm" style="width:100%;justify-content:center" onclick="openRenewLicense('${l.carNumber}','${l.expiry}','${l.company||''}','${l.driver||''}')">🔄 تجديد الترخيص</button></div></div>`;
-  }).join('');
-}
-
-function openRenewLicense(carNum,expiry,company,driver){
-  currentLicCar=carNum;
-  document.getElementById('lic-modal-info').innerHTML=`<strong>🚗 ${carNum}</strong>${company?' — '+company:''}${driver?'<br>السائق: '+driver:''}<br>تاريخ الانتهاء الحالي: <strong style="color:var(--accent)">${fmtD(expiry)}</strong>`;
-  document.getElementById('lic-new-date').value='';
-  openModal('m-license');
-}
-async function saveLicenseRenewal(){
-  const newDate=document.getElementById('lic-new-date').value;
-  if(!newDate){toast('⚠ أدخل التاريخ الجديد','warn');return;}
-  if(!currentLicCar){toast('⚠ لم يتم تحديد السيارة','warn');return;}
-  setBtnLoading('lic-save-btn',true);
-  try{
-    await apiPost('updateLicense',{carNumber:currentLicCar,newDate});
-    toast(`✅ تم تجديد ترخيص ${currentLicCar}`,'ok');
-    closeModal('m-license');
+    if (prog) prog.style.display = 'none';
+    showImportResult(key, true, `✅ تم رفع ${rows.length} سجل بنجاح إلى Firebase`);
+    clearImport(key);
+    toast(`✅ تم استيراد ${rows.length} سجل (${SHEET_MAPS[key].label})`, 'ok');
     await loadAll();
-  }catch(e){toast('❌ '+e.message,'err');}
-  finally{setBtnLoading('lic-save-btn',false);}
-}
-
-function exportLicensesExcel(){
-  const wb=XLSX.utils.book_new();const dt=new Date().toISOString().slice(0,10);
-  const ws=XLSX.utils.aoa_to_sheet([
-    ['رقم السيارة','الشركة','نوع السيارة','رقم الشاسيه','الموتور','تاريخ الانتهاء','الحالة','أيام متبقية'],
-    ...DATA.licenses.map(l=>[l.carNumber,l.company,l.carType,l.chassis,l.driver,l.expiry,l.status,l.diffDays??''])
-  ]);
-  ws['!cols']=[{wch:16},{wch:20},{wch:18},{wch:20},{wch:20},{wch:16},{wch:14},{wch:12}];
-  XLSX.utils.book_append_sheet(wb,ws,'التراخيص');
-  XLSX.writeFile(wb,`تراخيص_السيارات_${dt}.xlsx`);
-  toast('⬇ تم تصدير ملف التراخيص','ok');
-}
-
-/* ============================================================
-   SMART AUTOCOMPLETE
-============================================================ */
-const FLBLS={driver:'السائقون',car:'السيارات',desc:'الأوصاف',type:'الأنواع',name:'الأسماء'};
-function makeSuggestions(section,q){
-  const lq=(q||'').toLowerCase().trim();const seen=new Set();const out=[];
-  function add(label,icon,meta,field){if(!label)return;const k=field+':'+label;if(seen.has(k))return;if(!lq||label.toLowerCase().includes(lq)){seen.add(k);out.push({label,icon,meta,field});}}
-  if(section==='dr'){DATA.drivers.forEach(d=>{add(ss(d.name),'👤','سائق','name');add(ss(d.car),'🚗','سيارة','car');});}
-  else if(section==='vlog'){DATA.violations.forEach(v=>{add(ss(v.driver),'👤','سائق','driver');add(ss(v.car),'🚗','سيارة','car');add(ss(v.desc),'📝','وصف','desc');});DATA.drivers.forEach(d=>add(ss(d.name),'👤','سائق','driver'));}
-  else if(section==='dlog'){DATA.deductions.forEach(d=>{add(ss(d.driver),'👤','سائق','driver');add(ss(d.type),'🏷','نوع','type');});DATA.drivers.forEach(d=>add(ss(d.name),'👤','سائق','driver'));}
-  else if(section==='acc'){DATA.accounts.forEach(a=>add(ss(a.driver),'👤','سائق','driver'));DATA.drivers.forEach(d=>add(ss(d.name),'👤','سائق','driver'));}
-  else if(section==='rp'){DATA.violations.forEach(v=>{add(ss(v.driver),'👤','سائق','driver');add(ss(v.desc),'📝','وصف','desc');});DATA.deductions.forEach(d=>add(ss(d.driver),'👤','سائق','driver'));}
-  else if(section==='ded'){DATA.accounts.filter(a=>Number(a.remaining)>0).forEach(a=>add(ss(a.driver),'👤','سائق','driver'));}
-  return out.slice(0,20);
-}
-function renderACDrop(drop,items,q,onSelect){
-  if(!items.length){drop.innerHTML=`<div class="ac-empty-msg">لا توجد نتائج</div>`;drop.classList.add('open');return;}
-  const byField={};items.forEach(it=>{if(!byField[it.field])byField[it.field]=[];byField[it.field].push(it);});
-  let html='';Object.entries(byField).forEach(([f,list])=>{html+=`<div class="ac-section-head">${FLBLS[f]||f}</div>`;list.forEach(it=>html+=`<div class="ac-item" data-label="${it.label.replace(/"/g,'&quot;')}"><span class="ac-icon">${it.icon}</span><span class="ac-label">${hl(it.label,q)}</span><span class="ac-meta">${it.meta}</span></div>`);});
-  drop.innerHTML=html;drop.classList.add('open');
-  drop.querySelectorAll('.ac-item').forEach(el=>el.addEventListener('mousedown',e=>{e.preventDefault();onSelect(el.dataset.label);drop.classList.remove('open');}));
-}
-function setupAC(section,inputId,dropId,clearId,onSelect){
-  const input=document.getElementById(inputId),drop=document.getElementById(dropId),clearBtn=document.getElementById(clearId);
-  if(!input||!drop)return;let hi=-1;
-  const refresh=()=>{const q=input.value.trim();const items=makeSuggestions(section,q);if(items.length||q){renderACDrop(drop,items,q,val=>{input.value=val;if(clearBtn)clearBtn.classList.add('visible');onSelect(val);});}else drop.classList.remove('open');};
-  input.addEventListener('focus',refresh);
-  input.addEventListener('input',()=>{const q=input.value.trim();if(clearBtn)clearBtn.classList.toggle('visible',q.length>0);refresh();onSelect(q);});
-  input.addEventListener('keydown',e=>{const els=drop.querySelectorAll('.ac-item');
-    if(e.key==='ArrowDown'){e.preventDefault();hi=Math.min(hi+1,els.length-1);els.forEach((el,i)=>el.classList.toggle('highlighted',i===hi));}
-    else if(e.key==='ArrowUp'){e.preventDefault();hi=Math.max(hi-1,-1);els.forEach((el,i)=>el.classList.toggle('highlighted',i===hi));}
-    else if(e.key==='Enter'&&hi>=0){e.preventDefault();const el=els[hi];if(el){input.value=el.dataset.label;if(clearBtn)clearBtn.classList.add('visible');onSelect(el.dataset.label);drop.classList.remove('open');}}
-    else if(e.key==='Escape'){drop.classList.remove('open');hi=-1;}
-  });
-  document.addEventListener('click',e=>{if(!drop.contains(e.target)&&e.target!==input){drop.classList.remove('open');hi=-1;}});
-}
-function clearSearch(section){
-  const map={vlog:['vs-q','vs-q-clear'],dlog:['ds-q','ds-q-clear'],acc:['as-q','as-q-clear'],rp:['rp-q','rp-q-clear'],dr:['dr-q','dr-q-clear'],ded:['ded-search','ded-search-clear']};
-  const[iid,cid]=map[section]||[];
-  if(iid){const el=document.getElementById(iid);if(el)el.value='';}
-  if(cid){const el=document.getElementById(cid);if(el)el.classList.remove('visible');}
-  FILTERS[section]='';
-  if(section==='vlog'){PG.vlog=1;renderVLog();}if(section==='dlog'){PG.dlog=1;renderDLog();}
-  if(section==='acc')renderAcc();if(section==='rp'){PG.rp=1;renderReport();}
-  if(section==='dr')buildDriversTable();if(section==='ded')renderDedCards();
-}
-
-/* ============================================================
-   VIOLATION FORM AUTOCOMPLETE
-============================================================ */
-const VForm={driver:'',car:''};
-function initVFormSearch(){
-  const input=document.getElementById('fv-search'),drop=document.getElementById('fv-search-drop'),clearBtn=document.getElementById('fv-search-clear');
-  if(!input)return;let hi=-1,items=[];
-  function bld(q){const lq=(q||'').toLowerCase();return DATA.drivers.filter(d=>!lq||ss(d.name).toLowerCase().includes(lq)||ss(d.car).toLowerCase().includes(lq)).map(d=>({driver:d.name,car:d.car,mf:ss(d.name).toLowerCase().includes(lq)?'name':'car'}));}
-  function rDrop(q){items=bld(q);hi=-1;if(!items.length){drop.innerHTML='<div class="ac-empty">لا يوجد سائق مطابق</div>';drop.classList.add('open');return;}
-    const byN=items.filter(i=>i.mf==='name'),byC=items.filter(i=>i.mf==='car');let html='';
-    if(byN.length){html+='<div class="ac-section-head">👤 السائقون</div>';byN.forEach(it=>html+=`<div class="ac-row" data-driver="${it.driver}" data-car="${it.car}"><span class="ac-main">${hl(it.driver,q)}</span><span class="ac-sub">🚗 ${hl(it.car,q)}</span></div>`);}
-    if(byC.length){html+='<div class="ac-section-head">🚗 رقم السيارة</div>';byC.forEach(it=>html+=`<div class="ac-row" data-driver="${it.driver}" data-car="${it.car}"><span class="ac-main">${hl(it.driver,q)}</span><span class="ac-sub">🚗 ${hl(it.car,q)}</span></div>`);}
-    drop.innerHTML=html;drop.classList.add('open');drop.querySelectorAll('.ac-row').forEach(el=>el.addEventListener('mousedown',e=>{e.preventDefault();selVD(el.dataset.driver,el.dataset.car);}));}
-  function selVD(driver,car){VForm.driver=driver;VForm.car=car;['fv-driver','fv-car'].forEach((id,i)=>document.getElementById(id).value=[driver,car][i]);input.value=driver;input.classList.add('selected-valid');document.getElementById('fv-car-display').value=car;document.getElementById('fv-badge-txt').textContent=`${driver} — 🚗 ${car}`;document.getElementById('fv-selected-badge').style.display='';clearBtn.classList.add('visible');drop.classList.remove('open');}
-  input.addEventListener('focus',()=>rDrop(input.value.trim()));
-  input.addEventListener('input',()=>{const q=input.value.trim();clearBtn.classList.toggle('visible',q.length>0);if(VForm.driver){VForm.driver='';VForm.car='';['fv-driver','fv-car','fv-car-display'].forEach(id=>document.getElementById(id).value='');document.getElementById('fv-selected-badge').style.display='none';input.classList.remove('selected-valid');}rDrop(q);});
-  input.addEventListener('keydown',e=>{const rows=drop.querySelectorAll('.ac-row');if(e.key==='ArrowDown'){e.preventDefault();hi=Math.min(hi+1,rows.length-1);rows.forEach((el,i)=>el.classList.toggle('hi',i===hi));if(rows[hi])rows[hi].scrollIntoView({block:'nearest'});}else if(e.key==='ArrowUp'){e.preventDefault();hi=Math.max(hi-1,-1);rows.forEach((el,i)=>el.classList.toggle('hi',i===hi));}else if(e.key==='Enter'&&hi>=0){e.preventDefault();const el=rows[hi];if(el)selVD(el.dataset.driver,el.dataset.car);}else if(e.key==='Escape')drop.classList.remove('open');});
-  document.addEventListener('click',e=>{if(!drop.contains(e.target)&&e.target!==input)drop.classList.remove('open');});
-}
-function clearVSearch(){VForm.driver='';VForm.car='';['fv-search','fv-driver','fv-car','fv-car-display'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});document.getElementById('fv-search').classList.remove('selected-valid');document.getElementById('fv-selected-badge').style.display='none';document.getElementById('fv-search-clear').classList.remove('visible');document.getElementById('fv-search').focus();}
-
-/* ============================================================
-   RENDER FUNCTIONS
-============================================================ */
-function buildDriversTable(){
-  const q=(FILTERS.dr||'').toLowerCase();const t=document.getElementById('dr-tbl'),e=document.getElementById('dr-empty');
-  const filtered=DATA.drivers.filter(d=>!q||ss(d.name).toLowerCase().includes(q)||ss(d.car).toLowerCase().includes(q));
-  if(!filtered.length){t.innerHTML='';e.style.display='';return;}e.style.display='none';
-  t.innerHTML=filtered.map((d,i)=>`<tr class="${q?'search-match':''}"><td class="num-cell">${i+1}</td><td class="driver-cell">${hl(ss(d.name),q)}</td><td class="car-cell">${hl(ss(d.car),q)}</td><td><div style="display:flex;gap:6px"><button class="btn btn-sm btn-edit-sm" onclick="editDriver('${d.id}')">✏ تعديل</button><button class="btn btn-sm btn-del-sm" onclick="confirmDel('driver','${d.id}')">🗑 حذف</button></div></td></tr>`).join('');
-}
-function renderVLog(){
-  const q=FILTERS.vlog.toLowerCase(),fd=document.getElementById('vs-driver')?.value||'';
-  const filtered=DATA.violations.filter(v=>(!q||ss(v.driver).toLowerCase().includes(q)||ss(v.desc).toLowerCase().includes(q)||ss(v.car).toLowerCase().includes(q))&&(!fd||v.driver===fd)).sort((a,b)=>new Date(b.date)-new Date(a.date));
-  paginate(filtered,'vlog',PG.vlog,n=>{PG.vlog=n;renderVLog();},(s,o)=>{document.getElementById('vlog-tbl').innerHTML=s.map((v,i)=>`<tr class="${q?'search-match':''}"><td class="num-cell">${o+i+1}</td><td>${fmtD(v.date)}</td><td class="driver-cell">${hl(ss(v.driver),q)}</td><td class="car-cell">${hl(ss(v.car),q)}</td><td class="desc-cell">${hl(v.desc,q)}</td><td class="money-red">${fmt(v.amount)} ج</td><td><div style="display:flex;gap:6px"><button class="btn btn-sm btn-edit-sm" onclick="openEditV('${v.id}')">✏</button><button class="btn btn-sm btn-del-sm" onclick="confirmDel('violation','${v.id}')">🗑</button></div></td></tr>`).join('');},'vlog-empty','vlog-pager');
-}
-function renderDLog(){
-  const q=FILTERS.dlog.toLowerCase(),fd=document.getElementById('ds-driver')?.value||'';
-  const filtered=DATA.deductions.filter(d=>(!q||ss(d.driver).toLowerCase().includes(q)||ss(d.type).toLowerCase().includes(q))&&(!fd||d.driver===fd)).sort((a,b)=>new Date(b.date)-new Date(a.date));
-  paginate(filtered,'dlog',PG.dlog,n=>{PG.dlog=n;renderDLog();},(s,o)=>{document.getElementById('dlog-tbl').innerHTML=s.map((d,i)=>`<tr class="${q?'search-match':''}"><td class="num-cell">${o+i+1}</td><td>${fmtD(d.date)}</td><td class="driver-cell">${hl(ss(d.driver),q)}</td><td class="money-grn">${fmt(d.amount)} ج</td><td><span class="tag tag-d">${d.type||'خصم'}</span></td><td><div style="display:flex;gap:6px"><button class="btn btn-sm btn-edit-sm" onclick="openEditD('${d.id}')">✏</button><button class="btn btn-sm btn-del-sm" onclick="confirmDel('deduction','${d.id}')">🗑</button></div></td></tr>`).join('');},'dlog-empty','dlog-pager');
-}
-function renderAcc(){
-  const q=FILTERS.acc.toLowerCase(),rows=DATA.accounts.filter(a=>!q||ss(a.driver).toLowerCase().includes(q));
-  const t=document.getElementById('acc-tbl'),e=document.getElementById('acc-empty');
-  if(!rows.length){t.innerHTML='';e.style.display='';return;}e.style.display='none';
-  t.innerHTML=rows.map((a,i)=>`<tr class="${q?'search-match':''}"><td class="num-cell">${i+1}</td><td class="driver-cell">${hl(ss(a.driver),q)}</td><td class="money-red">${fmt(a.violations)} ج</td><td class="money-grn">${fmt(a.deductions)} ج</td><td class="money-gold" style="font-size:.95rem">${fmt(a.remaining)} ج</td></tr>`).join('');
-}
-function renderReport(){
-  const q=FILTERS.rp.toLowerCase(),fd=document.getElementById('rp-driver')?.value||'',ft=document.getElementById('rp-type')?.value||'';
-  const all=[...DATA.violations.map(v=>({...v,type:'مخالفة'})),...DATA.deductions.map(d=>({...d,car:'—',desc:d.type||'خصم',type:'خصم'}))].sort((a,b)=>new Date(b.date)-new Date(a.date));
-  const filtered=all.filter(r=>(!q||ss(r.driver).toLowerCase().includes(q)||ss(r.desc).toLowerCase().includes(q))&&(!fd||r.driver===fd)&&(!ft||r.type===ft));
-  paginate(filtered,'rp',PG.rp,n=>{PG.rp=n;renderReport();},(s,o)=>{document.getElementById('rp-tbl').innerHTML=s.map((r,i)=>`<tr><td class="num-cell">${o+i+1}</td><td>${fmtD(r.date)}</td><td class="driver-cell">${hl(ss(r.driver),q)}</td><td class="car-cell">${r.car||'—'}</td><td class="desc-cell">${hl(r.desc||'—',q)}</td><td class="${r.type==='مخالفة'?'money-red':'money-grn'}">${r.type==='مخالفة'?'-':'+'}${fmt(r.amount)} ج</td><td><span class="tag ${r.type==='مخالفة'?'tag-v':'tag-d'}">${r.type}</span></td></tr>`).join('');},'rp-empty','rp-pager');
-}
-function renderDedCards(){
-  const q=(FILTERS.ded||'').toLowerCase();const drivers=DATA.accounts.filter(a=>Number(a.remaining)>0);
-  const filtered=q?drivers.filter(a=>a.driver.toLowerCase().includes(q)):drivers;
-  document.getElementById('ded-total-bal').textContent=fmt(drivers.reduce((s,a)=>s+Number(a.remaining),0))+' ج';
-  document.getElementById('ded-count-bal').textContent=drivers.length+' سائق';
-  const cards=document.getElementById('ded-cards'),empty=document.getElementById('ded-empty');
-  if(!filtered.length){cards.innerHTML='';empty.style.display='';return;}empty.style.display='none';
-  cards.innerHTML=filtered.map(acc=>{const d=DATA.drivers.find(x=>x.name===acc.driver)||{};const esc=CSS.escape(acc.driver);
-    return `<div class="ded-card"><div class="ded-card-head"><div><div class="ded-card-name">${hl(acc.driver,q)}</div>${d.car?`<div class="ded-card-car">🚗 ${d.car}</div>`:''}</div><div style="text-align:left"><div style="font-size:.72rem;color:var(--muted);font-weight:700">المتبقي المستحق</div><div style="font-family:'Readex Pro';font-weight:700;font-size:1.1rem;color:var(--gold)">${fmt(acc.remaining)} ج</div></div></div><div class="ded-card-body"><div style="display:flex;gap:8px;margin-bottom:10px"><div class="fg" style="flex:2"><label style="font-size:.68rem;font-weight:700;color:var(--muted)">المبلغ المراد خصمه</label><input type="number" id="dc-amt-${esc}" value="${acc.remaining}" min="0" step="1" max="${acc.remaining}" style="background:var(--paper);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;font-family:'IBM Plex Sans Arabic',sans-serif;font-size:.9rem;font-weight:700;width:100%;outline:none"></div><div class="fg" style="flex:1"><label style="font-size:.68rem;font-weight:700;color:var(--muted)">التاريخ</label><input type="date" id="dc-date-${esc}" value="${toDay()}" style="background:var(--paper);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;font-family:'IBM Plex Sans Arabic',sans-serif;width:100%;outline:none"></div></div><div style="margin-bottom:10px"><label style="font-size:.68rem;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">نوع الخصم</label><input type="text" id="dc-type-${esc}" value="خصم" style="background:var(--paper);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;font-family:'IBM Plex Sans Arabic',sans-serif;width:100%;outline:none"></div><button class="btn btn-green ded-save-btn" onclick="saveSingleDeduction('${acc.driver}',${acc.remaining})">💾 حفظ وطباعة PDF</button></div></div>`;
-  }).join('');
-}
-
-/* ============================================================
-   PAGINATE
-============================================================ */
-function paginate(data,key,cur,onChange,renderRows,emptyId,pagerId){
-  const total=data.length,tPg=Math.ceil(total/PS)||1,pg=Math.min(cur,tPg),off=(pg-1)*PS,slice=data.slice(off,off+PS);
-  const empty=document.getElementById(emptyId);
-  if(!total){renderRows([],0);empty.style.display='';document.getElementById(pagerId).innerHTML='';return;}
-  empty.style.display='none';renderRows(slice,off);
-  let html=`<button class="pg-btn" ${pg===1?'disabled':''} onclick="(${onChange.toString()})(${pg-1})">‹</button>`;
-  for(let i=1;i<=tPg;i++){if(i===1||i===tPg||Math.abs(i-pg)<=1)html+=`<button class="pg-btn ${i===pg?'on':''}" onclick="(${onChange.toString()})(${i})">${i}</button>`;else if(Math.abs(i-pg)===2)html+=`<span style="color:var(--muted);padding:0 3px">…</span>`;}
-  html+=`<button class="pg-btn" ${pg===tPg?'disabled':''} onclick="(${onChange.toString()})(${pg+1})">›</button>`;
-  document.getElementById(pagerId).innerHTML=html;
-}
-
-/* ============================================================
-   VIOLATION SUBMIT
-============================================================ */
-async function submitViolation(){
-  const date=toISO(document.getElementById('fv-date').value);const driver=document.getElementById('fv-driver').value||VForm.driver;const car=document.getElementById('fv-car').value||VForm.car;
-  if(!driver||!car){toast('⚠ برجاء اختيار السائق من قائمة البحث','warn');return;}if(!date){toast('⚠ برجاء اختيار التاريخ','warn');return;}
-  const rows=[];for(let i=0;i<5;i++){const desc=(document.getElementById(`fv-desc-${i}`)?.value||'').trim(),amt=parseFloat(document.getElementById(`fv-amt-${i}`)?.value||'');if(desc&&!isNaN(amt)&&amt>0)rows.push({desc,amount:amt});}
-  if(!rows.length){toast('⚠ أدخل وصف ومبلغ على الأقل','warn');return;}
-  const dups=DATA.violations.filter(v=>toISO(v.date)===date&&v.driver===driver);
-  pendingVRows=rows.map(r=>({...r,date,driver,car}));
-  if(dups.length>0){
-    document.getElementById('dup-list-items').innerHTML=dups.map(v=>`<li>📅 ${fmtD(v.date)} | ${fmt(v.amount)} ج | ${v.desc}</li>`).join('');
-    openModal('m-dup');return;
+  } catch (err) {
+    if (prog) prog.style.display = 'none';
+    showImportResult(key, false, '❌ فشل الرفع: ' + err.message);
+    if (btn) btn.disabled = false;
   }
-  await proceedSaveViolation();
-}
-async function proceedSaveViolation(){
-  closeModal('m-dup');if(!pendingVRows.length)return;setBtnLoading('fv-submit',true);
-  try{for(const r of pendingVRows)await apiPost('addViolation',{date:r.date,driver:r.driver,car:r.car,desc:r.desc,amount:r.amount});toast(`✅ تم حفظ ${pendingVRows.length} مخالفة`,'ok');pendingVRows=[];clearVForm();await loadAll();}
-  catch(e){toast('❌ '+e.message,'err');}finally{setBtnLoading('fv-submit',false);}
-}
-function clearVForm(){clearVSearch();VForm.driver='';VForm.car='';document.getElementById('fv-date').value=toDay();for(let i=0;i<5;i++){const d=document.getElementById(`fv-desc-${i}`);if(d)d.value='';const a=document.getElementById(`fv-amt-${i}`);if(a)a.value='';}}
-
-/* ============================================================
-   IMPORT EXCEL
-============================================================ */
-function handleImportFile(input){const f=input.files[0];if(!f)return;const r=new FileReader();r.onload=e=>{try{const wb=XLSX.read(new Uint8Array(e.target.result),{type:'uint8array',cellDates:true});const ws=wb.Sheets[wb.SheetNames[0]];const json=XLSX.utils.sheet_to_json(ws,{defval:'',raw:false});parseImportRows(json);}catch(err){toast('❌ خطأ في قراءة الملف: '+err.message,'err');}};r.readAsArrayBuffer(f);input.value='';}
-function parseImportRows(json){
-  const CD=['التاريخ','date','Date'],CC=['رقم السيارة','car','السيارة'],CDr=['اسم السائق','driver','السائق','الاسم'],CDs=['وصف المخالفة','الوصف','description','desc'],CA=['المبلغ المخصوم','المبلغ','amount','مبلغ'];
-  function fk(row,keys){return keys.find(k=>k in row);}
-  importData=json.map((row,idx)=>{
-    const kD=fk(row,CD),kC=fk(row,CC),kDr=fk(row,CDr),kDs=fk(row,CDs),kA=fk(row,CA);
-    let date='',car='',driver='',desc='',amount=0,errors=[];
-    if(kD){const raw=row[kD];date=raw instanceof Date?raw.toISOString().slice(0,10):toISO(String(raw));if(!date)errors.push('تاريخ غير صحيح');}else errors.push('التاريخ مفقود');
-    if(kC)car=String(row[kC]).trim();else car='';
-    if(kDr)driver=String(row[kDr]).trim();else errors.push('اسم السائق مفقود');
-    if(kDs)desc=String(row[kDs]).trim();else errors.push('الوصف مفقود');
-    if(kA){amount=parseFloat(String(row[kA]).replace(/[^0-9.]/g,''));if(isNaN(amount)||amount<=0)errors.push('المبلغ غير صحيح');}else errors.push('المبلغ مفقود');
-    const isDup=DATA.violations.some(v=>toISO(v.date)===date&&v.driver===driver&&v.desc===desc);
-    return{idx:idx+1,date,car,driver,desc,amount,errors,isDup};
-  }).filter(r=>r.driver||r.desc);
-  renderImportPreview();
-  show('add-v');
-}
-function renderImportPreview(){
-  const ok=importData.filter(r=>r.errors.length===0&&!r.isDup).length;
-  const dup=importData.filter(r=>r.errors.length===0&&r.isDup).length;
-  const err=importData.filter(r=>r.errors.length>0).length;
-  document.getElementById('imp-ok').textContent=`✅ ${ok} جاهز`;
-  document.getElementById('imp-dup').textContent=`⚠️ ${dup} مكرر`;
-  document.getElementById('imp-err').textContent=`❌ ${err} خطأ`;
-  document.getElementById('import-preview-wrap').style.display='';
-  document.getElementById('import-preview-body').innerHTML=importData.map(r=>{
-    let badge='';if(r.errors.length>0)badge=`<span class="tag tag-v">❌ ${r.errors.join(' | ')}</span>`;
-    else if(r.isDup)badge='<span class="tag tag-v">⚠️ مكرر</span>';
-    else badge='<span class="tag tag-d">✅ جاهز</span>';
-    return `<tr style="${r.errors.length?'opacity:.5':''}"><td class="num-cell">${r.idx}</td><td>${fmtD(r.date)||r.date}</td><td class="driver-cell">${r.driver}</td><td class="car-cell">${r.car}</td><td class="desc-cell">${r.desc}</td><td class="money-red">${fmt(r.amount)} ج</td><td>${badge}</td></tr>`;
-  }).join('');
-}
-function clearImportPreview(){importData=[];document.getElementById('import-preview-wrap').style.display='none';}
-async function doImport(){
-  const toImport=importData.filter(r=>r.errors.length===0);if(!toImport.length){toast('⚠ لا توجد صفوف صحيحة','warn');return;}
-  const dups=toImport.filter(r=>r.isDup);let rows=toImport;
-  if(dups.length>0&&!confirm(`⚠️ يوجد ${dups.length} صف مكرر. استمرار الاستيراد الكامل؟`))rows=toImport.filter(r=>!r.isDup);
-  setBtnLoading('btn-do-import',true);
-  try{let c=0;for(const r of rows){await apiPost('addViolation',{date:r.date,driver:r.driver,car:r.car||'',desc:r.desc,amount:r.amount});c++;}toast(`✅ تم استيراد ${c} مخالفة`,'ok');clearImportPreview();await loadAll();}
-  catch(e){toast('❌ '+e.message,'err');}finally{setBtnLoading('btn-do-import',false);}
-}
-function downloadImportTemplate(){
-  const wb=XLSX.utils.book_new();
-  const ws=XLSX.utils.aoa_to_sheet([['التاريخ','رقم السيارة','اسم السائق','وصف المخالفة','المبلغ المخصوم'],['2025-01-15','أ ب ج 123','أحمد محمد','تجاوز السرعة',500],['2025-01-16','د ه و 456','محمد علي','ركن في مكان محظور',200]]);
-  ws['!cols']=[{wch:14},{wch:18},{wch:20},{wch:35},{wch:16}];
-  XLSX.utils.book_append_sheet(wb,ws,'المخالفات');XLSX.writeFile(wb,'قالب_استيراد_المخالفات.xlsx');toast('⬇ تم تحميل القالب','ok');
-}
-document.addEventListener('DOMContentLoaded',()=>{
-  const dz=document.getElementById('drop-zone');if(!dz)return;
-  dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over');});
-  dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
-  dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('over');const f=e.dataTransfer.files[0];if(f){const inp=document.getElementById('import-file2');const dt=new DataTransfer();dt.items.add(f);inp.files=dt.files;handleImportFile(inp);}});
-});
-
-/* ============================================================
-   EXPORT EXCEL
-============================================================ */
-function exportToExcel(type){
-  const wb=XLSX.utils.book_new();const dt=new Date().toISOString().slice(0,10);
-  if(type==='v'||type==='all'){const ws=XLSX.utils.aoa_to_sheet([['التاريخ','اسم السائق','رقم السيارة','الوصف','المبلغ'],...DATA.violations.map(v=>[v.date,v.driver,v.car||'',v.desc,Number(v.amount)])]);ws['!cols']=[{wch:14},{wch:22},{wch:18},{wch:35},{wch:14}];XLSX.utils.book_append_sheet(wb,ws,'المخالفات');}
-  if(type==='d'||type==='all'){const ws=XLSX.utils.aoa_to_sheet([['التاريخ','اسم السائق','المبلغ','النوع'],...DATA.deductions.map(d=>[d.date,d.driver,Number(d.amount),d.type||'خصم'])]);ws['!cols']=[{wch:14},{wch:22},{wch:14},{wch:20}];XLSX.utils.book_append_sheet(wb,ws,'الخصومات');}
-  if(type==='a'||type==='all'){const ws=XLSX.utils.aoa_to_sheet([['اسم السائق','إجمالي المخالفات','إجمالي الخصومات','المتبقي'],...DATA.accounts.map(a=>[a.driver,Number(a.violations),Number(a.deductions),Number(a.remaining)])]);ws['!cols']=[{wch:22},{wch:20},{wch:20},{wch:16}];XLSX.utils.book_append_sheet(wb,ws,'الحسابات');}
-  if(type==='all'){const all=[...DATA.violations.map(v=>([v.date,v.driver,v.car||'',v.desc,Number(v.amount),'مخالفة'])),...DATA.deductions.map(d=>([d.date,d.driver,'',d.type||'خصم',Number(d.amount),'خصم']))].sort((a,b)=>new Date(b[0])-new Date(a[0]));const ws=XLSX.utils.aoa_to_sheet([['التاريخ','السائق','السيارة','الوصف','المبلغ','النوع'],...all]);ws['!cols']=[{wch:14},{wch:22},{wch:18},{wch:35},{wch:14},{wch:10}];XLSX.utils.book_append_sheet(wb,ws,'كل_العمليات');}
-  const names={v:'مخالفات',d:'خصومات',a:'حسابات',all:'تقرير_كامل'};
-  XLSX.writeFile(wb,`${names[type]||'تصدير'}_${dt}.xlsx`);toast('⬇ تم تصدير Excel','ok');
 }
 
-/* ============================================================
-   MONTHLY REPORT
-============================================================ */
-function generateMonthlyReport(){
-  const month=parseInt(document.getElementById('rpt-month').value);const year=parseInt(document.getElementById('rpt-year').value);const drvF=document.getElementById('rpt-driver').value;
-  let filtered=DATA.deductions.filter(d=>{if(!d.date)return false;const iso=toISO(d.date);const[y,m]=iso.split('-');return parseInt(m)===month&&parseInt(y)===year&&(!drvF||d.driver===drvF);}).sort((a,b)=>toISO(b.date).localeCompare(toISO(a.date)));
-  const total=filtered.reduce((s,d)=>s+Number(d.amount),0);const uDr=new Set(filtered.map(d=>d.driver)).size;const avg=filtered.length?total/filtered.length:0;
-  const mn=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'][month-1];
-  document.getElementById('rpt-stats').innerHTML=`<div class="rstat"><div class="rstat-label">عدد الخصومات</div><div class="rstat-val" style="color:var(--g)">${filtered.length}</div></div><div class="rstat"><div class="rstat-label">إجمالي المبلغ</div><div class="rstat-val" style="color:var(--accent)">${fmt(total)} ج</div></div><div class="rstat"><div class="rstat-label">عدد السائقين</div><div class="rstat-val" style="color:var(--gold)">${uDr}</div></div><div class="rstat"><div class="rstat-label">متوسط الخصم</div><div class="rstat-val">${fmt(avg)} ج</div></div>`;
-  document.getElementById('rpt-body').innerHTML=!filtered.length?'<tr><td colspan="6" class="tbl-loading">لا توجد خصومات في هذا الشهر</td></tr>':filtered.map((d,i)=>`<tr><td class="num-cell">${i+1}</td><td>${fmtD(d.date)}</td><td class="driver-cell">${d.driver}</td><td class="car-cell">${d.car||'—'}</td><td class="desc-cell">${d.type||'خصم'}</td><td class="money-grn">${fmt(d.amount)} ج</td></tr>`).join('');
-  document.getElementById('monthly-rpt-box').style.display='';
-  currentMonthlyReport={month,year,mn,drvF,filtered,total,uDr,avg};
-}
-function printMonthlyReport(){
-  if(!currentMonthlyReport?.filtered?.length){toast('⚠ عرّض التقرير أولاً','warn');return;}
-  const r=currentMonthlyReport;
-  const html=`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>تقرير الخصومات — ${r.mn} ${r.year}</title><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700;800&display=swap" rel="stylesheet"><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'IBM Plex Sans Arabic',sans-serif;direction:rtl;background:#fff;padding:24px;color:#0d1117}.hd{text-align:center;border-bottom:4px solid #c0392b;padding-bottom:14px;margin-bottom:20px}.hd h1{font-size:1.5rem;font-weight:800;color:#c0392b}.hd p{color:#666;font-size:.85rem;margin-top:4px}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:20px}.s{background:#f5f0e8;border-radius:8px;padding:.85rem;text-align:center}.sl{font-size:.68rem;font-weight:700;color:#8a7f70;text-transform:uppercase;margin-bottom:4px}.sv{font-size:1.3rem;font-weight:700}table{width:100%;border-collapse:collapse}th{background:#0d1117;color:#f5f0e8;padding:9px 12px;text-align:right;font-size:.78rem}td{padding:8px 12px;border-bottom:1px solid #ede8dc}.ft{text-align:center;margin-top:20px;padding-top:10px;border-top:1px solid #e0d8cc;font-size:.7rem;color:#aaa}@media print{@page{margin:8mm;size:A4}}</style></head><body><div class="hd"><h1>🚦 النظام المتكامل</h1><p>تقرير الخصومات — ${r.mn} ${r.year} ${r.drvF?'| السائق: '+r.drvF:''}</p><p style="font-size:.75rem;color:#aaa">طُبع: ${new Date().toLocaleString('ar-EG')}</p></div><div class="stats"><div class="s"><div class="sl">الخصومات</div><div class="sv" style="color:#2c6e49">${r.filtered.length}</div></div><div class="s"><div class="sl">إجمالي المبلغ</div><div class="sv" style="color:#c0392b">${fmt(r.total)} ج</div></div><div class="s"><div class="sl">عدد السائقين</div><div class="sv" style="color:#b8860b">${r.uDr}</div></div><div class="s"><div class="sl">متوسط الخصم</div><div class="sv">${fmt(r.avg)} ج</div></div></div><table><thead><tr><th>#</th><th>التاريخ</th><th>السائق</th><th>رقم السيارة</th><th>الوصف/النوع</th><th>المبلغ</th></tr></thead><tbody>${r.filtered.map((d,i)=>`<tr><td style="color:#999">${i+1}</td><td>${fmtD(d.date)}</td><td style="font-weight:600">${d.driver}</td><td>${d.car||'—'}</td><td>${d.type||'خصم'}</td><td style="color:#2c6e49;font-weight:700">${fmt(d.amount)} ج</td></tr>`).join('')}</tbody></table><div class="ft">النظام المتكامل — ${new Date().toLocaleString('ar-EG')}</div><script>window.onload=()=>{window.print();setTimeout(()=>window.close(),1000)}<\/script></body></html>`;
-  const w=window.open('','_blank','width=900,height=700');w.document.write(html);w.document.close();
+function showImportResult(key, ok, msg) {
+  const el = document.getElementById('imp-result-' + key);
+  if (!el) return;
+  el.style.display = '';
+  el.className = 'import-result ' + (ok ? 'ok' : 'err');
+  el.textContent = msg;
+  setTimeout(() => { el.style.display = 'none'; }, 6000);
 }
 
-/* ============================================================
-   SINGLE + BULK DEDUCTION PDF
-============================================================ */
-async function saveSingleDeduction(driver,maxBalance){
-  const esc=CSS.escape(driver);const amtEl=document.getElementById(`dc-amt-${esc}`),dateEl=document.getElementById(`dc-date-${esc}`),typeEl=document.getElementById(`dc-type-${esc}`);
-  if(!amtEl||!dateEl)return;const amount=parseFloat(amtEl.value),date=toISO(dateEl.value||toDay()),type=(typeEl?.value||'خصم').trim()||'خصم';
-  if(isNaN(amount)||amount<=0){toast('⚠ أدخل مبلغاً صحيحاً','warn');return;}if(amount>maxBalance){toast('⚠ المبلغ أكبر من الرصيد','warn');return;}
-  const btn=amtEl.closest('.ded-card-body').querySelector('.ded-save-btn');btn.disabled=true;btn.innerHTML='<span class="spinner"></span> جاري...';
-  try{await apiPost('addDeduction',{date,driver,amount,type});toast(`✅ تم خصم ${fmt(amount)} ج من ${driver}`,'ok');await loadAll();printSinglePDF({driver,amount,date,type,remaining:maxBalance-amount});}
-  catch(e){toast('❌ '+e.message,'err');btn.disabled=false;btn.innerHTML='💾 حفظ وطباعة PDF';}
-}
-function printSinglePDF({driver,amount,date,type,remaining}){
-  const driverData=DATA.drivers.find(d=>d.name===driver)||{};const acc=DATA.accounts.find(a=>a.driver===driver)||{};
-  const html=`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>إيصال خصم — ${driver}</title><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700;800&display=swap" rel="stylesheet"><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'IBM Plex Sans Arabic',sans-serif;direction:rtl;background:#fff;padding:32px;color:#0d1117}.hd{text-align:center;border-bottom:4px solid #c0392b;padding-bottom:16px;margin-bottom:24px}.hd h1{font-size:1.6rem;font-weight:800;color:#c0392b}.hd h2{font-size:1rem;color:#555;margin-top:4px}.hd .dt{font-size:.8rem;color:#888;margin-top:6px}.box{border:2px solid #c8bfaa;border-radius:12px;padding:20px;margin-bottom:20px}.box-t{font-weight:800;font-size:.9rem;color:#c0392b;margin-bottom:14px}table{width:100%;border-collapse:collapse}td{padding:10px 14px;border:1px solid #e0d8cc}.lbl{background:#f5f0e8;font-weight:700;width:180px;font-size:.83rem;color:#666}.val{font-size:.9rem;font-weight:600}.big{font-size:1.2rem;font-weight:800;color:#c0392b}.grn{color:#2c6e49}.gold{color:#b8860b}.sigs{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:40px}.sig{border-top:2px dashed #c8bfaa;padding-top:10px;text-align:center;font-size:.8rem;color:#888}.ft{text-align:center;margin-top:28px;padding-top:16px;border-top:1px solid #e0d8cc;font-size:.75rem;color:#aaa}@media print{body{padding:12px}@page{margin:10mm}}</style></head><body><div class="hd"><h1>🚦 النظام المتكامل</h1><h2>إيصال خصم مالي</h2><div class="dt">تاريخ الإصدار: ${new Date().toLocaleString('ar-EG')}</div></div><div class="box"><div class="box-t">💳 بيانات السائق</div><table><tr><td class="lbl">اسم السائق</td><td class="val">${driver}</td></tr>${driverData.car?`<tr><td class="lbl">رقم السيارة</td><td class="val">${driverData.car}</td></tr>`:''}</table></div><div class="box"><div class="box-t">💸 تفاصيل الخصم</div><table><tr><td class="lbl">تاريخ الخصم</td><td class="val">${fmtDL(date)}</td></tr><tr><td class="lbl">نوع الخصم</td><td class="val">${type}</td></tr><tr><td class="lbl">المبلغ المخصوم</td><td class="val big">${fmt(amount)} جنيه</td></tr><tr><td class="lbl">إجمالي المخالفات</td><td class="val" style="color:#c0392b">${fmt(acc.violations||0)} جنيه</td></tr><tr><td class="lbl">إجمالي الخصومات</td><td class="val grn">${fmt((Number(acc.deductions||0)+amount))} جنيه</td></tr><tr><td class="lbl">الرصيد المتبقي بعد</td><td class="val gold">${fmt(remaining)} جنيه</td></tr></table></div><div class="sigs"><div class="sig">توقيع السائق</div><div class="sig">توقيع المسؤول</div></div><div class="ft">النظام المتكامل — ${new Date().toLocaleString('ar-EG')}</div><script>window.onload=()=>{window.print();setTimeout(()=>window.close(),1000)}<\/script></body></html>`;
-  const w=window.open('','_blank','width=700,height=900');w.document.write(html);w.document.close();
+function clearImport(key) {
+  IMP.parsed[key] = null;
+  const prev = document.getElementById('prev-' + key);
+  if (prev) prev.style.display = 'none';
+  const prog = document.getElementById('prog-' + key);
+  if (prog) prog.style.display = 'none';
 }
 
-let bulkResults=[];
-function openBulkDeduction(){if(!DATA.accounts.length){toast('⚠ لا توجد حسابات','warn');return;}document.getElementById('bulk-amount').value='1000';document.getElementById('bulk-type').value='خصم جماعي';document.getElementById('bulk-date').value=toDay();document.getElementById('bulk-notes').value='';computeBulkPreview();openModal('m-bulk');}
-let bulkT=null;function debouncedBulkPreview(){clearTimeout(bulkT);bulkT=setTimeout(computeBulkPreview,300);}
-function computeBulkPreview(){
-  const amount=parseFloat(document.getElementById('bulk-amount').value)||0;
-  bulkResults=DATA.accounts.map(acc=>{const cur=Number(acc.remaining),actual=Math.min(amount,cur);return{driver:acc.driver,current:cur,requested:amount,actual,after:cur-actual,full:actual>=cur};});
-  const toD=bulkResults.filter(r=>r.actual>0),total=toD.reduce((s,r)=>s+r.actual,0),after=bulkResults.reduce((s,r)=>s+r.after,0);
-  document.getElementById('bsum-count').textContent=toD.length;document.getElementById('bsum-total').textContent=fmt(total)+' ج';document.getElementById('bsum-after').textContent=fmt(after)+' ج';
-  document.getElementById('bulk-preview').innerHTML=bulkResults.map((r,i)=>{const badge=r.actual===0?'<span class="tag" style="background:#f3f4f6;color:#999">لا رصيد</span>':r.full?'<span class="tag tag-v">كامل</span>':r.actual<r.requested?`<span class="tag" style="background:rgba(184,134,11,.1);color:var(--gold)">جزئي</span>`:'<span class="tag tag-d">✔</span>';return `<tr style="${r.actual===0?'opacity:.4':''}"><td class="num-cell">${i+1}</td><td class="driver-cell">${r.driver}</td><td>${fmt(r.current)} ج</td><td>${fmt(r.requested)} ج</td><td class="money-red">${fmt(r.actual)} ج</td><td class="${r.after===0?'money-red':'money-grn'}">${fmt(r.after)} ج</td><td>${badge}</td></tr>`;}).join('');
-}
-async function executeBulkDeduction(){
-  const amount=parseFloat(document.getElementById('bulk-amount').value),type=document.getElementById('bulk-type').value.trim()||'خصم جماعي',date=toISO(document.getElementById('bulk-date').value||toDay()),notes=document.getElementById('bulk-notes').value.trim();
-  if(isNaN(amount)||amount<=0){toast('⚠ أدخل مبلغاً صحيحاً','warn');return;}
-  const toD=bulkResults.filter(r=>r.actual>0);if(!toD.length){toast('⚠ لا يوجد سائقون بأرصدة','warn');return;}
-  setBtnLoading('bulk-submit',true);
-  try{for(const item of toD)await apiPost('addDeduction',{date,driver:item.driver,amount:item.actual,type});await loadAll();printBulkPDF({date,type,amount,notes,results:bulkResults,toD});closeModal('m-bulk');toast(`✅ تم خصم من ${toD.length} سائق`,'ok');}
-  catch(e){toast('❌ '+e.message,'err');}finally{setBtnLoading('bulk-submit',false);}
-}
-function printBulkPDF({date,type,amount,notes,results,toD}){
-  const totD=toD.reduce((s,r)=>s+r.actual,0),totA=results.reduce((s,r)=>s+r.after,0);
-  const html=`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>تقرير الخصم الجماعي</title><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700;800&display=swap" rel="stylesheet"><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'IBM Plex Sans Arabic',sans-serif;direction:rtl;background:#fff;padding:24px;color:#0d1117}.hd{text-align:center;border-bottom:4px solid #c0392b;padding-bottom:14px;margin-bottom:20px}.hd h1{font-size:1.5rem;font-weight:800;color:#c0392b}.it{width:100%;border-collapse:collapse;margin-bottom:18px;font-size:.83rem}.it td{padding:8px 12px;border:1px solid #c8bfaa}.lbl{background:#f5f0e8;font-weight:700;width:160px}.st{font-weight:800;font-size:.9rem;margin:16px 0 8px;color:#c0392b}.mt{width:100%;border-collapse:collapse;font-size:.82rem;margin-bottom:18px}.mt th{background:#0d1117;color:#f5f0e8;padding:8px 12px;text-align:right;border:1px solid #333}.mt td{padding:7px 12px;border:1px solid #ddd}.mt tfoot td{background:#ede8dc;font-weight:800;padding:9px 12px}.red{color:#c0392b;font-weight:700}.grn{color:#2c6e49;font-weight:700}.gold{color:#b8860b;font-weight:700}.dim{opacity:.45}.ft{text-align:center;margin-top:20px;padding-top:12px;border-top:1px solid #e0d8cc;font-size:.72rem;color:#aaa}@media print{@page{margin:8mm;size:A4}}</style></head><body><div class="hd"><h1>🚦 النظام المتكامل</h1><h2>تقرير الخصم الجماعي</h2><p style="font-size:.75rem;color:#888">${new Date().toLocaleString('ar-EG')}</p></div><table class="it"><tr><td class="lbl">نوع الخصم</td><td>${type}</td><td class="lbl">المبلغ/سائق</td><td class="red">${fmt(amount)} ج</td></tr><tr><td class="lbl">تاريخ الخصم</td><td>${fmtDL(date)}</td><td class="lbl">إجمالي المخصوم</td><td class="red">${fmt(totD)} ج</td></tr><tr><td class="lbl">عدد السائقين</td><td>${toD.length}</td><td class="lbl">إجمالي المتبقي</td><td class="gold">${fmt(totA)} ج</td></tr>${notes?`<tr><td class="lbl">ملاحظات</td><td colspan="3">${notes}</td></tr>`:''}</table><div class="st">📋 تفاصيل الخصومات</div><table class="mt"><thead><tr><th>#</th><th>السائق</th><th>الرصيد قبل</th><th>المطلوب</th><th>المخصوم فعلاً</th><th>الرصيد بعد</th><th>ملاحظة</th></tr></thead><tbody>${results.map((r,i)=>`<tr class="${r.actual===0?'dim':''}"><td style="color:#999">${i+1}</td><td style="font-weight:700">${r.driver}</td><td>${fmt(r.current)} ج</td><td>${fmt(r.requested)} ج</td><td class="red">${fmt(r.actual)} ج</td><td class="${r.after===0?'red':'grn'}">${fmt(r.after)} ج</td><td style="font-size:.75rem;color:#888">${r.actual===0?'لا رصيد':r.full?'خُصم الكل':r.actual<r.requested?'جزئي':'✔'}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="4">الإجمالي</td><td class="red">${fmt(totD)} ج</td><td class="gold">${fmt(totA)} ج</td><td></td></tr></tfoot></table><div class="ft">النظام المتكامل — ${new Date().toLocaleString('ar-EG')}</div><script>window.onload=()=>{window.print();setTimeout(()=>window.close(),1500)}<\/script></body></html>`;
-  const w=window.open('','_blank','width=900,height=800');w.document.write(html);w.document.close();
-}
+// ── تحميل نموذج CSV ───────────────────────────────────────
 
-/* ============================================================
-   CRUD
-============================================================ */
-let editDrvId=null;
-function openAddDriver(){editDrvId=null;document.getElementById('m-driver-title').textContent='➕ إضافة سائق جديد';document.getElementById('md-name').value='';document.getElementById('md-car').value='';openModal('m-driver');}
-function editDriver(id){const d=DATA.drivers.find(x=>x.id===id);if(!d)return;editDrvId=id;document.getElementById('m-driver-title').textContent='✏ تعديل بيانات السائق';document.getElementById('md-name').value=d.name;document.getElementById('md-car').value=d.car;openModal('m-driver');}
-async function saveDriver(){const name=document.getElementById('md-name').value.trim(),car=document.getElementById('md-car').value.trim();if(!name||!car){toast('⚠ أدخل الاسم ورقم السيارة','warn');return;}setBtnLoading('md-save',true);try{if(editDrvId){await apiPost('updateDriver',{id:editDrvId,name,car});toast('✅ تم تحديث السائق','ok');}else{await apiPost('addDriver',{name,car});toast('✅ تمت الإضافة','ok');}closeModal('m-driver');await loadAll();}catch(e){toast('❌ '+e.message,'err');}finally{setBtnLoading('md-save',false);}}
-let editVId=null;
-function openEditV(id){const v=DATA.violations.find(x=>x.id===id);if(!v)return;editVId=id;document.getElementById('ev-date').value=v.date;document.getElementById('ev-driver').value=v.driver;document.getElementById('ev-car').value=v.car;document.getElementById('ev-desc').value=v.desc;document.getElementById('ev-amount').value=v.amount;openModal('m-ev');}
-async function updateViolation(){const date=toISO(document.getElementById('ev-date').value),driver=document.getElementById('ev-driver').value.trim(),car=document.getElementById('ev-car').value.trim(),desc=document.getElementById('ev-desc').value.trim(),amount=parseFloat(document.getElementById('ev-amount').value);if(!date||!driver||!car||!desc||isNaN(amount)||amount<=0){toast('⚠ تحقق من البيانات','warn');return;}setBtnLoading('ev-save',true);try{await apiPost('updateViolation',{id:editVId,date,driver,car,desc,amount});toast('✅ تم التعديل','ok');closeModal('m-ev');await loadAll();}catch(e){toast('❌ '+e.message,'err');}finally{setBtnLoading('ev-save',false);}}
-let editDId=null;
-function openEditD(id){const d=DATA.deductions.find(x=>x.id===id);if(!d)return;editDId=id;document.getElementById('ed-date').value=d.date;document.getElementById('ed-driver').value=d.driver;document.getElementById('ed-amount').value=d.amount;document.getElementById('ed-type').value=d.type||'خصم';openModal('m-ed');}
-async function updateDeduction(){const date=toISO(document.getElementById('ed-date').value),driver=document.getElementById('ed-driver').value.trim(),amount=parseFloat(document.getElementById('ed-amount').value),type=document.getElementById('ed-type').value.trim()||'خصم';if(!date||!driver||isNaN(amount)||amount<=0){toast('⚠ تحقق من البيانات','warn');return;}setBtnLoading('ed-save',true);try{await apiPost('updateDeduction',{id:editDId,date,driver,amount,type});toast('✅ تم التعديل','ok');closeModal('m-ed');await loadAll();}catch(e){toast('❌ '+e.message,'err');}finally{setBtnLoading('ed-save',false);}}
-let pendingDel=null;
-function confirmDel(type,id){pendingDel={type,id};openModal('m-confirm');}
-document.getElementById('confirm-del-btn').onclick=async()=>{if(!pendingDel)return;const{type,id}=pendingDel;const btn=document.getElementById('confirm-del-btn');btn.disabled=true;btn.textContent='⏳ جاري...';try{await apiPost({violation:'deleteViolation',deduction:'deleteDeduction',driver:'deleteDriver'}[type],{id});toast('🗑 تم الحذف','ok');closeModal('m-confirm');pendingDel=null;await loadAll();}catch(e){toast('❌ '+e.message,'err');}finally{btn.disabled=false;btn.textContent='🗑 تأكيد الحذف';}};
-
-/* ============================================================
-   UI HELPERS
-============================================================ */
-function show(id){
-  document.querySelectorAll('.section').forEach(function(s){s.classList.remove('active');});
-  document.querySelectorAll('.tnav-btn').forEach(function(b){b.classList.remove('active');});
-  var el=document.getElementById(id);
-  if(!el){console.error('Section not found: '+id);return;}
-  el.classList.add('active');
-  var tnEl=document.getElementById('tn-'+id);
-  if(tnEl)tnEl.classList.add('active');
-  if(id==='add-d')renderDedCards();
-  if(id==='licenses'){renderLicenses();renderLicStats();}
+function downloadSample(key) {
+  const cfg = SHEET_MAPS[key];
+  const rows = [cfg.headers, cfg.sample];
+  const csv  = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href  = URL.createObjectURL(blob);
+  link.download = `نموذج_${cfg.label}.csv`;
+  link.click();
 }
-function openModal(id){document.getElementById(id).classList.add('open');}
-function closeModal(id){document.getElementById(id).classList.remove('open');}
-document.querySelectorAll('.backdrop').forEach(b=>b.addEventListener('click',e=>{if(e.target===b)b.classList.remove('open');}));
-function setBtnLoading(id,loading){const btn=document.getElementById(id);if(!btn)return;btn.disabled=loading;if(loading){btn.dataset.orig=btn.innerHTML;btn.innerHTML='<span class="spinner"></span> جاري...';}else btn.innerHTML=btn.dataset.orig||btn.innerHTML;}
-let toastT;
-function toast(msg,type=''){const el=document.getElementById('toast');el.textContent=msg;el.className='show'+(type?' '+type:'');clearTimeout(toastT);toastT=setTimeout(()=>{el.className='';},3200);}
-
-/* ============================================================
-   INIT
-============================================================ */
-buildFvRows();setTodayDates();
-(()=>{const m=new Date().getMonth()+1;const el=document.getElementById('rpt-month');if(el)el.value=m;})();
-setTimeout(()=>{
-  initVFormSearch();
-  setupAC('dr','dr-q','dr-q-ac','dr-q-clear',val=>{FILTERS.dr=val;buildDriversTable();});
-  setupAC('vlog','vs-q','vs-q-ac','vs-q-clear',val=>{FILTERS.vlog=val;PG.vlog=1;renderVLog();});
-  setupAC('dlog','ds-q','ds-q-ac','ds-q-clear',val=>{FILTERS.dlog=val;PG.dlog=1;renderDLog();});
-  setupAC('acc','as-q','as-q-ac','as-q-clear',val=>{FILTERS.acc=val;renderAcc();});
-  setupAC('rp','rp-q','rp-q-ac','rp-q-clear',val=>{FILTERS.rp=val;PG.rp=1;renderReport();});
-  setupAC('ded','ded-search','ded-search-ac','ded-search-clear',val=>{FILTERS.ded=val;renderDedCards();});
-},80);
-loadAll();
-</script>
-</body>
-</html>
