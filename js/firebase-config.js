@@ -9,12 +9,12 @@
 // ============================================================
 
 const FIREBASE_CONFIG = {
-  apiKey:            "YOUR_API_KEY",
-  authDomain:        "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId:         "YOUR_PROJECT_ID",
-  storageBucket:     "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId:             "YOUR_APP_ID"
+  apiKey:            "AIzaSyBiRE-Zj6GKOOwe4IAdEPblfk40kTi8jxU",
+  authDomain:        "car-traffic-9828b.firebaseapp.com",
+  projectId:         "car-traffic-9828b",
+  storageBucket:     "car-traffic-9828b.firebasestorage.app",
+  messagingSenderId: "554924112638",
+  appId:             "1:554924112638:web:12ab897a31c579782083af"
 };
 
 // ============================================================
